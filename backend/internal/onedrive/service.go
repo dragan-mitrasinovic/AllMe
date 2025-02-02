@@ -11,17 +11,30 @@ import (
 
 const (
 	ImageMimeTypePrefix = "image/"
+	DefaultScope        = "https://graph.microsoft.com/.default"
 )
+
+type ServiceConfig struct {
+	BaseUrl      string
+	ClientId     string
+	ClientSecret string
+	RedirectUri  string
+}
 
 type Service struct {
 	client        *http.Client
 	sharesBaseUrl string
+	client *http.Client
+	config ServiceConfig
 }
 
 func NewService(client *http.Client, sharesBaseUrl string) *Service {
+func NewService(client *http.Client, config ServiceConfig) *Service {
 	return &Service{
 		client:        client,
 		sharesBaseUrl: sharesBaseUrl,
+		client: client,
+		config: config,
 	}
 }
 
@@ -59,6 +72,7 @@ func (s *Service) getItemsFromOneDrive(folderLink, authToken string) ([]DriveIte
 	if err != nil {
 		return nil, errors.New("failed to send request")
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.New("received non-200 response code")
