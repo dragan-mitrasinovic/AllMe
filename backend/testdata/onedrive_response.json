@@ -1,0 +1,75 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#shares('u%21aHR0cHM6Ly9vbmVkcml2ZS5saXZlLmNvbS8_cmVkZWVtPWFIUjBjSE02THk4eFpISjJMbTF6TDJZdll5OWpZbVV5TURBeU0yVXhOV1kyTnpka0wwVndaRTlhVTBGblZ6UkdUR2RRY1dKTWJqVXhNRVIzUWswNFZsODRlUzFvWWxGS015MU5kbmxETmtkM1VuYyZpZD1DQkUyMDAyM0UxNUY2NzdEJTIxczIwNjU0ZTk3NWIyMDRiODE4MGZhOWIyZTdlNzVkMDNjJmNpZD1DQkUyMDAyM0UxNUY2NzdE')/driveItem/children",
+  "value": [
+    {
+      "@microsoft.graph.downloadUrl": "https://my.microsoftpersonalcontent.com/personal/cbe20023e15f677d/_layouts/15/download.aspx?UniqueId=e466bb82-2600-45d2-bb87-193ad32e2879&Translate=false&tempauth=v1e.eyJzaXRlaWQiOiI3YWU5YjFiYi02OTdlLTQ0M2YtYjMyMi01ZmY3MTVjODQxOTciLCJhcHBfZGlzcGxheW5hbWUiOiJHcmFwaCIsImFwcGlkIjoiNjBhZGYxMWMtZTU1NC00Nzc0LWI5ZmQtOGZhNTRmOGFmYTdkIiwiYXVkIjoiMDAwMDAwMDMtMDAwMC0wZmYxLWNlMDAtMDAwMDAwMDAwMDAwL215Lm1pY3Jvc29mdHBlcnNvbmFsY29udGVudC5jb21AOTE4ODA0MGQtNmM2Ny00YzViLWIxMTItMzZhMzA0YjY2ZGFkIiwiZXhwIjoiMTczODQ1Mzk1NSJ9.v1eLjJs7wuqheFQ3QMlggCw9lyObxAIwpAR_4uscPD2dti3TV3pz97WXo2-Plgvte1wnzNuTfhP7HjaSjG6HbAkyJAyNH9ue7C5V17tEqvPcPlinPnz3fNCHnBIhZUwJVgqq45t99rzXvSP6y-cvpJbNSRVpBwkUrnTjPlwoq7Qrm9ALuf__b7b4xhHY_pcI_PUWgjDzUcI-llqdLLeo07rP1HTHZ51HcsbjcKWsIKD0Odi9VsNL1dIz3ICDfE4C5TV2mYs6lzqY2nMz8GgzgQvI20GNL8J82XDpYu-8VSRPWWa3_mpeJcLFmJUvopXT9W-o33aIlkLvd9GNEF1w1rijxg2TAY9D0YI_ctHgU7Fn8zbZF_BianCO6uuyt5d7JxmRd9cwRxmKr7sLwkF7mHkhlRVU80-HDH-okc7UWdJEKLagPCO26PyZTfoSP_sTz1qYlRme0jJn53F08HkZLQ._vzrzFheFcODuFWDqa7uraUHuIo8H8Jgbabu6jSeC-U&ApiVersion=2.0",
+      "createdDateTime": "2024-10-14T19:06:52Z",
+      "eTag": "\"{E466BB82-2600-45D2-BB87-193AD32E2879},6\"",
+      "id": "CBE20023E15F677D!se466bb82260045d2bb87193ad32e2879",
+      "lastModifiedDateTime": "2025-02-01T15:32:50Z",
+      "name": "test_picture_1.jpg",
+      "webUrl": "https://onedrive.live.com?cid=CBE20023E15F677D&id=CBE20023E15F677D!se466bb82260045d2bb87193ad32e2879",
+      "cTag": "\"c:{E466BB82-2600-45D2-BB87-193AD32E2879},7\"",
+      "size": 3094540,
+      "createdBy": {
+        "user": {
+          "email": "dragan.mitrasinovic19@gmail.com",
+          "id": "CBE20023E15F677D",
+          "displayName": "Dragan Mitrasinovic"
+        }
+      },
+      "lastModifiedBy": {
+        "user": {
+          "email": "dragan.mitrasinovic19@gmail.com",
+          "id": "CBE20023E15F677D",
+          "displayName": "Dragan Mitrasinovic"
+        }
+      },
+      "parentReference": {
+        "driveType": "personal",
+        "driveId": "CBE20023E15F677D",
+        "id": "CBE20023E15F677D!s20654e975b204b8180fa9b2e7e75d03c",
+        "name": "TestData",
+        "path": "/drives/CBE20023E15F677D/root:/AllMe/TestData",
+        "siteId": "7ae9b1bb-697e-443f-b322-5ff715c84197"
+      },
+      "file": {
+        "mimeType": "image/jpeg",
+        "hashes": {
+          "quickXorHash": "uBdV8d9sL+dsW3cWqVlTEYFpWnM=",
+          "sha1Hash": "76510989044484EA5F605586E63F8471394783E6",
+          "sha256Hash": "9AA8381B77DE305F51421819745917E6352A2CE89A251F1357A00888CB520071"
+        }
+      },
+      "fileSystemInfo": {
+        "createdDateTime": "2024-10-14T19:06:52Z",
+        "lastModifiedDateTime": "2025-02-01T15:32:50Z"
+      },
+      "image": {
+        "height": 4608,
+        "width": 3456
+      },
+      "photo": {
+        "cameraMake": "samsung",
+        "cameraModel": "SM-G975F",
+        "exposureDenominator": 10.0,
+        "exposureNumerator": 1.0,
+        "fNumber": 2.2,
+        "focalLength": 1.8,
+        "iso": 800,
+        "orientation": 6,
+        "takenDateTime": "2024-01-12T18:16:43Z"
+      },
+      "shared": {
+        "scope": "users",
+        "owner": {
+          "user": {
+            "email": "dragan.mitrasinovic19@gmail.com",
+            "id": "CBE20023E15F677D",
+            "displayName": "Dragan Mitrasinovic"
+          }
+        }
+      }
+    }
+  ]
+}
