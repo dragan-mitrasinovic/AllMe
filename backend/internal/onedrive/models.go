@@ -18,3 +18,7 @@ type DriveItem struct {
 type FolderContentsResponse struct {
 	Value []DriveItem `json:"value"`
 }
+
+type AuthTokenResponse struct {
+	AuthToken string `json:"access_token"`
+}
