@@ -14,28 +14,26 @@ const (
 )
 
 type Service struct {
-	client  *http.Client
-	baseUrl string
+	client        *http.Client
+	sharesBaseUrl string
 }
 
-func NewService(client *http.Client, baseUrl string) *Service {
+func NewService(client *http.Client, sharesBaseUrl string) *Service {
 	return &Service{
-		client:  client,
-		baseUrl: baseUrl,
+		client:        client,
+		sharesBaseUrl: sharesBaseUrl,
 	}
 }
 
 func (s *Service) GetImagesFromSharedFolder(folderLink, authToken string) ([]DriveImage, error) {
-	encodedLink := encodeFolderLink(folderLink)
-
-	driveItems, err := s.getItemsFromOneDrive(encodedLink, authToken)
+	driveItems, err := s.getItemsFromOneDrive(folderLink, authToken)
 	if err != nil {
 		return nil, err
 	}
 
 	var images []DriveImage
 	for _, item := range driveItems {
-		if strings.HasPrefix(item.File.MimeType, ImageMimeTypePrefix) {
+		if isImage(item) {
 			images = append(images, DriveImage{
 				Name:   item.Name,
 				Source: item.Source,
@@ -46,8 +44,10 @@ func (s *Service) GetImagesFromSharedFolder(folderLink, authToken string) ([]Dri
 	return images, nil
 }
 
-func (s *Service) getItemsFromOneDrive(encodeFolderLink, authToken string) ([]DriveItem, error) {
-	requestUrl := fmt.Sprintf("%s/%s/driveItem", s.baseUrl, encodeFolderLink)
+func (s *Service) getItemsFromOneDrive(folderLink, authToken string) ([]DriveItem, error) {
+	encodedFolderLink := encodeFolderLink(folderLink)
+	requestUrl := fmt.Sprintf("%s/%s/driveItem", s.sharesBaseUrl, encodedFolderLink)
+
 	req, err := http.NewRequest(http.MethodGet, requestUrl, nil)
 	if err != nil {
 		return nil, errors.New("failed to create request")
@@ -59,7 +59,6 @@ func (s *Service) getItemsFromOneDrive(encodeFolderLink, authToken string) ([]Dr
 	if err != nil {
 		return nil, errors.New("failed to send request")
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.New("received non-200 response code")
@@ -68,6 +67,11 @@ func (s *Service) getItemsFromOneDrive(encodeFolderLink, authToken string) ([]Dr
 	var response FolderContentsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return nil, errors.New("failed to decode response")
+	}
+
+	err = resp.Body.Close()
+	if err != nil {
+		return nil, errors.New("failed to close response body")
 	}
 
 	return response.Value, nil
@@ -81,4 +85,8 @@ func encodeFolderLink(folderLink string) string {
 	encoded = strings.ReplaceAll(encoded, "+", "-")
 
 	return "u!" + encoded
+}
+
+func isImage(item DriveItem) bool {
+	return strings.HasPrefix(item.File.MimeType, ImageMimeTypePrefix)
 }
