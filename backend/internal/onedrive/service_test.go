@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -98,22 +99,16 @@ func TestGetImagesFromSharedFolder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(
-				func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(tt.mockStatusCode)
-					if tt.mockResponse == nil {
-						return
-					}
-
-					err := json.NewEncoder(w).Encode(tt.mockResponse)
-					if err != nil {
-						t.Fatalf("failed to encode response: %v", err)
-					}
-				}))
+			server := initMockServer(t, tt.mockStatusCode, tt.mockResponse)
 			defer server.Close()
 
 			client := server.Client()
-			service := NewService(client, server.URL)
+			serviceConfig := ServiceConfig{
+				SharesBaseUrl: server.URL + "/shares",
+				AuthTokenUrl:  server.URL + "/token",
+			}
+
+			service := NewService(client, serviceConfig)
 
 			items, err := service.GetImagesFromSharedFolder("encodedFolderLink", "authToken")
 
@@ -137,7 +132,7 @@ func loadMockResponseFromFile(t *testing.T, s string) interface{} {
 	}
 
 	var response interface{}
-	if err := json.NewDecoder(file).Decode(&response); err != nil {
+	if err = json.NewDecoder(file).Decode(&response); err != nil {
 		t.Fatalf("failed to decode file: %v", err)
 	}
 
@@ -147,4 +142,27 @@ func loadMockResponseFromFile(t *testing.T, s string) interface{} {
 	}
 
 	return response
+}
+
+func initMockServer(t *testing.T, mockStatusCode int, mockSharesResponse interface{}) *httptest.Server {
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(mockStatusCode)
+			if r.URL.Path == "/token" {
+				err := json.NewEncoder(w).Encode(AuthTokenResponse{AuthToken: "authToken"})
+				if err != nil {
+					t.Fatalf("failed to encode auth response: %v", err)
+				}
+
+			} else if strings.Contains(r.URL.Path, "/shares") {
+				if mockSharesResponse != nil {
+					err := json.NewEncoder(w).Encode(mockSharesResponse)
+					if err != nil {
+						t.Fatalf("failed to encode shares response: %v", err)
+					}
+				}
+			}
+		}))
+
+	return server
 }
