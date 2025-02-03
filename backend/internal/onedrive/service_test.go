@@ -60,15 +60,15 @@ func TestGetImagesFromSharedFolder(t *testing.T) {
 			mockStatusCode: http.StatusOK,
 			mockResponse: FolderContentsResponse{
 				Value: []DriveItem{
-					{Name: "image1.jpg", File: File{MimeType: "image/jpeg"}, Source: "http://example.com/image1.jpg"},
-					{Name: "image2.png", File: File{MimeType: "image/png"}, Source: "http://example.com/image2.png"},
-					{Name: "file3.txt", File: File{MimeType: "text/plain"}, Source: "http://example.com/file3.txt"},
+					{Name: "image1.jpg", File: File{MimeType: "image/jpeg"}, Source: "https://example.com/image1.jpg"},
+					{Name: "image2.png", File: File{MimeType: "image/png"}, Source: "https://example.com/image2.png"},
+					{Name: "file3.txt", File: File{MimeType: "text/plain"}, Source: "https://example.com/file3.txt"},
 				},
 			},
 			expectedError: nil,
 			expectedItems: []DriveImage{
-				{Name: "image1.jpg", Source: "http://example.com/image1.jpg"},
-				{Name: "image2.png", Source: "http://example.com/image2.png"},
+				{Name: "image1.jpg", Source: "https://example.com/image1.jpg"},
+				{Name: "image2.png", Source: "https://example.com/image2.png"},
 			},
 		},
 		{
@@ -98,12 +98,18 @@ func TestGetImagesFromSharedFolder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(tt.mockStatusCode)
-				if tt.mockResponse != nil {
-					json.NewEncoder(w).Encode(tt.mockResponse)
-				}
-			}))
+			server := httptest.NewServer(http.HandlerFunc(
+				func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(tt.mockStatusCode)
+					if tt.mockResponse == nil {
+						return
+					}
+
+					err := json.NewEncoder(w).Encode(tt.mockResponse)
+					if err != nil {
+						t.Fatalf("failed to encode response: %v", err)
+					}
+				}))
 			defer server.Close()
 
 			client := server.Client()
@@ -129,11 +135,15 @@ func loadMockResponseFromFile(t *testing.T, s string) interface{} {
 	if err != nil {
 		t.Fatalf("failed to open file: %v", err)
 	}
-	defer file.Close()
 
 	var response interface{}
 	if err := json.NewDecoder(file).Decode(&response); err != nil {
 		t.Fatalf("failed to decode file: %v", err)
+	}
+
+	err = file.Close()
+	if err != nil {
+		t.Fatalf("failed to close file: %v", err)
 	}
 
 	return response
