@@ -254,15 +254,21 @@ def process_batch_background(job_id: str, session_id: str, images: List[str]):
                 if len(face_locations) > 0:
                     face_encodings = face_recognition.face_encodings(image_array, face_locations)
                     
+                    # Compare all faces in the image and keep the best match
+                    best_distance = float('inf')
+                    
                     for face_encoding in face_encodings:
-                        # Calculate face distance instead of just comparison
+                        # Calculate face distance
                         distances = face_recognition.face_distance([base_encoding], face_encoding)
                         distance = distances[0]
                         
-                        # Use 0.7 as the maximum threshold
-                        if distance <= 0.7:
-                            matches.append(MatchResult(idx, float(distance)))
-                            break
+                        # Use 0.7 as the maximum threshold and track the best matching distance
+                        if distance <= 0.7 and distance < best_distance:
+                            best_distance = distance
+                    
+                    # If any face matched, add the image with the best distance
+                    if best_distance <= 0.7:
+                        matches.append(MatchResult(idx, float(best_distance)))
                 
                 job_store.update_progress(job_id, idx + 1, len(matches))
                         

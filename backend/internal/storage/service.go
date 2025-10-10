@@ -139,7 +139,40 @@ func (s *Service) listAllItemsWithPagination(item *models.CloudItem, token *mode
 		nextPageToken = nextToken
 	}
 
+	// Sort items: folders first, then images, then other files
+	s.sortCloudItems(allItems)
+
 	return allItems, nil
+}
+
+// sortCloudItems sorts items by type: folders first, then images, then other files
+// Within each category, items are sorted alphabetically by name
+func (s *Service) sortCloudItems(items []*models.CloudItem) {
+	slices.SortFunc(items, func(a, b *models.CloudItem) int {
+		// Folders come first
+		if a.IsFolder && !b.IsFolder {
+			return -1
+		}
+		if !a.IsFolder && b.IsFolder {
+			return 1
+		}
+
+		// If both are not folders, images come before other files
+		if !a.IsFolder && !b.IsFolder {
+			aIsImage := IsImageMimeType(a.MimeType)
+			bIsImage := IsImageMimeType(b.MimeType)
+
+			if aIsImage && !bIsImage {
+				return -1
+			}
+			if !aIsImage && bIsImage {
+				return 1
+			}
+		}
+
+		// Within the same category, sort alphabetically by name (case-insensitive)
+		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+	})
 }
 
 // IsImageMimeType checks if a mime type is an image
