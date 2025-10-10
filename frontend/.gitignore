@@ -1,0 +1,30 @@
+# Angular build outputs
+dist/
+.angular/
+
+# Coverage reports
+coverage/
+.nyc_output/
+
+# Dependencies
+node_modules/
+
+# Package manager files
+yarn.lock
+pnpm-lock.yaml
+
+# Angular CLI cache
+.angular/cache/
+
+# Test results
+test-results/
+junit.xml
+
+# E2E test results
+e2e/results/
+
+# Angular specific temporary files
+*.tsbuildinfo
+
+# Storybook build outputs
+storybook-static/

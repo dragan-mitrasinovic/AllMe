@@ -1,0 +1,234 @@
+@if (isMatching) {
+<!-- Full-screen progress view -->
+<div class="progress-fullscreen">
+  <mat-card class="progress-card">
+    <mat-card-header>
+      <mat-card-title>Finding Matching Faces</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <mat-progress-bar mode="determinate" [value]="matchingProgress" class="progress-bar">
+      </mat-progress-bar>
+      <p class="progress-text">{{ matchingMessage }}</p>
+      <p class="progress-stats">
+        Processing: {{ currentImage }} / {{ totalImages }} images | Matches found: {{ matchesFound }}
+      </p>
+    </mat-card-content>
+  </mat-card>
+</div>
+} @else {
+<!-- Normal folder preview and upload view -->
+<div class="preview-container">
+  <mat-card class="stats-card">
+    <mat-card-content>
+      <p>Total items: {{ contents.length }} | Images: {{ images.length }} | Page {{ currentPage }} of {{ totalPages }}</p>
+    </mat-card-content>
+  </mat-card>
+
+  @if (isSelectingFromFolder) {
+  <mat-card class="selection-hint-card">
+    <mat-card-content>
+      <mat-icon color="primary">touch_app</mat-icon>
+      <span>Click on an image to select it as your reference</span>
+    </mat-card-content>
+  </mat-card>
+  }
+
+  <mat-grid-list [cols]="gridCols" rowHeight="200px" gutterSize="1rem" class="gallery">
+    @for (item of paginatedContents; track item.id) {
+    <mat-grid-tile>
+      <mat-card class="gallery-card" 
+        [class.folder-item]="item.is_folder"
+        [class.file-item]="!item.is_folder && !isImage(item.mime_type)"
+        [class.selectable]="isSelectingFromFolder && isImage(item.mime_type) && !item.is_folder"
+        [class.selected]="isImageSelected(item)"
+        (click)="onImageClick(item)">
+        <mat-card-content>
+          @if (item.is_folder) {
+          <div class="item-icon">
+            <mat-icon class="large-icon">folder</mat-icon>
+          </div>
+          } @else if (isImage(item.mime_type)) {
+          <img [src]="(item.thumbnail_url || item.download_url) | thumbnail:item.provider" [alt]="item.name" class="thumbnail" loading="lazy" />
+          @if (isSelectingFromFolder && !item.is_folder) {
+          <div class="selection-overlay">
+            <mat-icon class="selection-icon">check_circle</mat-icon>
+          </div>
+          }
+          } @else {
+          <div class="item-icon">
+            <mat-icon class="medium-icon">insert_drive_file</mat-icon>
+          </div>
+          }
+          <p class="item-name">{{ item.name }}</p>
+        </mat-card-content>
+      </mat-card>
+    </mat-grid-tile>
+    }
+  </mat-grid-list>
+
+  <!-- Pagination Controls -->
+  @if (totalPages > 1) {
+  <div class="pagination-wrapper">
+    <div class="pagination-controls">
+      <button mat-icon-button 
+        [disabled]="currentPage === 1" 
+        (click)="goToPage(currentPage - 1)"
+        aria-label="Previous page">
+        <mat-icon>chevron_left</mat-icon>
+      </button>
+
+      @for (pageNum of getPageNumbers(); track pageNum) {
+        @if (pageNum === -1) {
+          <span class="pagination-ellipsis">...</span>
+        } @else {
+          <button mat-button 
+            [class.active]="pageNum === currentPage"
+            (click)="goToPage(pageNum)"
+            [attr.aria-label]="'Go to page ' + pageNum"
+            [attr.aria-current]="pageNum === currentPage ? 'page' : null">
+            {{ pageNum }}
+          </button>
+        }
+      }
+
+      <button mat-icon-button 
+        [disabled]="currentPage === totalPages" 
+        (click)="goToPage(currentPage + 1)"
+        aria-label="Next page">
+        <mat-icon>chevron_right</mat-icon>
+      </button>
+    </div>
+  </div>
+  }
+
+  <div class="upload-section-wrapper" #uploadSection id="uploadSection">
+    <mat-card class="upload-section-card" [class.processing]="isUploading">
+      <mat-card-header>
+        <mat-card-title>Start Face Search</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="upload-section">
+          <div class="upload-controls">
+            <div class="search-options">
+              <mat-checkbox 
+                [(ngModel)]="recursiveSearch" 
+                color="primary"
+                matTooltip="When enabled, searches all images in subfolders within the shared folder, not just the top-level folder"
+                matTooltipPosition="above">
+                Search recursively in subfolders
+              </mat-checkbox>
+            </div>
+
+            <div class="reference-source-section">
+              <label class="section-label">Reference Image:</label>
+              <mat-radio-group [(ngModel)]="referenceImageSource" (change)="onReferenceSourceChange()" color="primary">
+                <mat-radio-button value="device">Upload from device</mat-radio-button>
+                <mat-radio-button value="folder">Select from folder</mat-radio-button>
+              </mat-radio-group>
+            </div>
+
+            @if (referenceImageSource === 'device') {
+            <div class="upload-area">
+              <input type="file" #fileInput accept="image/*" (change)="onFileSelected($event)" id="fileInput"
+                class="file-input" />
+
+              <button mat-stroked-button color="primary" class="upload-button" (click)="fileInput.click()"
+                aria-label="Upload reference face image">
+                <mat-icon>photo_camera</mat-icon>
+                @if (selectedFile) {
+                <span>{{ selectedFile.name }}</span>
+                } @else {
+                <span>Click to upload</span>
+                }
+              </button>
+
+              @if (isUploading) {
+              <mat-progress-bar mode="indeterminate" class="upload-progress"></mat-progress-bar>
+              <p class="upload-status">Uploading...</p>
+              }
+
+              @if (uploadComplete) {
+              <p class="upload-status success">
+                <mat-icon color="primary">check_circle</mat-icon>
+                Ready to search
+              </p>
+              }
+
+              @if (errorMessage && !isUploading) {
+              <div class="upload-error">
+                <mat-icon color="warn">error</mat-icon>
+                <span>{{ errorMessage }}</span>
+              </div>
+              }
+            </div>
+            } @else {
+            <div class="folder-selection-area">
+              @if (!selectedCloudImage) {
+              <p class="selection-instruction">
+                <mat-icon>info</mat-icon>
+                Click on an image in the gallery above to select it
+              </p>
+              } @else {
+              <div class="selection-info-container">
+                <p class="selection-info">
+                  <mat-icon color="primary">check_circle</mat-icon>
+                  Selected: {{ selectedCloudImage.name }}
+                </p>
+                <button mat-stroked-button color="primary" class="change-selection-button" 
+                  (click)="enableFolderSelection()"
+                  [disabled]="isUploading"
+                  aria-label="Select a different image">
+                  <mat-icon>swap_horiz</mat-icon>
+                  <span>Change Selection</span>
+                </button>
+              </div>
+              }
+
+              @if (uploadComplete && referenceImageSource === 'folder') {
+              <p class="upload-status success">
+                <mat-icon color="primary">check_circle</mat-icon>
+                Ready to search
+              </p>
+              }
+
+              @if (errorMessage && !isUploading) {
+              <div class="upload-error">
+                <mat-icon color="warn">error</mat-icon>
+                <span>{{ errorMessage }}</span>
+              </div>
+              }
+            </div>
+            }
+
+            <button mat-raised-button color="primary" class="start-button" [disabled]="!uploadComplete"
+              (click)="startFaceMatching()" aria-label="Start face matching process">
+              <mat-icon>face</mat-icon>
+              <span>Start Face Matching</span>
+            </button>
+          </div>
+
+          @if (referenceImageUrl || (isUploading && referenceImageSource === 'folder')) {
+          <div class="preview-section">
+            <div class="preview-image-container">
+              @if (isUploading && referenceImageSource === 'folder') {
+              <!-- Loading state in preview -->
+              <div class="preview-loader">
+                <mat-spinner [diameter]="64"></mat-spinner>
+                <p class="loader-text">Validating...</p>
+              </div>
+              } @else if (referenceImageUrl) {
+                @if (referenceImageProvider) {
+                <img [src]="referenceImageUrl | thumbnail:referenceImageProvider" alt="Selected reference image" class="preview-image" />
+                } @else {
+                <img [src]="referenceImageUrl" alt="Selected reference image" class="preview-image" />
+                }
+              }
+            </div>
+          </div>
+          }
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+</div>
+}

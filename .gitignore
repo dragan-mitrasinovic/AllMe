@@ -1,0 +1,41 @@
+# IDE and Editor files (project-wide)
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Environment variables (project-wide)
+.env
+.env.local
+.env.*.local
+backend/.env.local
+face-service/.env.local
+frontend/.env.local
+
+# Docker Compose overrides (local development only)
+docker-compose.override.yml
+
+# Logs (project-wide)
+*.log
+logs/
+
+# Temporary files (project-wide)
+tmp/
+temp/
+.tmp/
+
+# Local development
+.local/
+# Test 
+data files
+backend/test/testdata/

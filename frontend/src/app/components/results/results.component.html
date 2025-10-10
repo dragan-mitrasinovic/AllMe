@@ -1,0 +1,185 @@
+<div class="results-container">
+  @if (errorMessage) {
+  <mat-card class="error-card">
+    <mat-card-content>
+      <mat-icon color="warn">error</mat-icon>
+      <span>{{ errorMessage }}</span>
+    </mat-card-content>
+  </mat-card>
+  }
+
+  @if (strongMatches.length > 0 || weakMatches.length > 0) {
+  <mat-card class="stats-card">
+    <mat-card-content>
+      <p>Found {{ totalMatches }} matching photos out of {{ totalImages }} total images</p>
+      <p class="match-breakdown">
+        <span class="strong-count">{{ strongMatches.length }} strong matches</span>
+        <span class="separator">•</span>
+        <span class="weak-count">{{ weakMatches.length }} weak matches</span>
+      </p>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Strong Matches Section -->
+  @if (strongMatches.length > 0) {
+  <div class="match-section strong-section">
+    <div class="section-header">
+      <h2 class="section-title">
+        <mat-icon class="section-icon">verified</mat-icon>
+        Strong Matches ({{ strongMatches.length }})
+      </h2>
+      <button mat-stroked-button color="primary" (click)="selectAllStrong()" class="select-all-btn">
+        <mat-icon>{{ selectedStrongItems.size === strongMatches.length ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+        {{ selectedStrongItems.size === strongMatches.length ? 'Deselect All' : 'Select All' }}
+      </button>
+    </div>
+
+    <mat-grid-list [cols]="gridCols" rowHeight="220px" gutterSize="1rem" class="results-grid">
+      @for (item of paginatedStrongMatches; track trackByItemId($index, item)) {
+      <mat-grid-tile>
+        <mat-card class="result-card strong-match" [class.selected]="isSelected(item)">
+          <mat-card-content (click)="toggleSelection(item)">
+            <mat-checkbox class="result-checkbox" [checked]="isSelected(item)" (change)="toggleSelection(item)"
+              (click)="$event.stopPropagation()">
+            </mat-checkbox>
+            <img [src]="(item.thumbnail_url || item.download_url) | thumbnail:item.provider" [alt]="item.name" class="result-thumbnail"
+              loading="lazy" />
+            <p class="file-name">{{ item.name }}</p>
+          </mat-card-content>
+        </mat-card>
+      </mat-grid-tile>
+      }
+    </mat-grid-list>
+
+    <!-- Strong Matches Pagination -->
+    @if (strongTotalPages > 1) {
+    <div class="pagination-wrapper">
+      <div class="pagination-controls">
+        <button mat-icon-button [disabled]="strongCurrentPage === 1" (click)="goToStrongPage(strongCurrentPage - 1)">
+          <mat-icon>chevron_left</mat-icon>
+        </button>
+        
+        @for (page of strongPageNumbers; track page) {
+          @if (page === -1) {
+            <div class="pagination-ellipsis">...</div>
+          } @else {
+            <button mat-button 
+              [class.active]="page === strongCurrentPage"
+              (click)="goToStrongPage(page)">
+              {{ page }}
+            </button>
+          }
+        }
+        
+        <button mat-icon-button [disabled]="strongCurrentPage === strongTotalPages" (click)="goToStrongPage(strongCurrentPage + 1)">
+          <mat-icon>chevron_right</mat-icon>
+        </button>
+      </div>
+    </div>
+    }
+  </div>
+  }
+
+  <!-- Weak Matches Section -->
+  @if (weakMatches.length > 0) {
+  <div class="match-section weak-section">
+    <div class="section-header">
+      <h2 class="section-title">
+        <mat-icon class="section-icon">help_outline</mat-icon>
+        Weak Matches ({{ weakMatches.length }})
+      </h2>
+      <button mat-stroked-button color="accent" (click)="selectAllWeak()" class="select-all-btn">
+        <mat-icon>{{ selectedWeakItems.size === weakMatches.length ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+        {{ selectedWeakItems.size === weakMatches.length ? 'Deselect All' : 'Select All' }}
+      </button>
+    </div>
+
+    <mat-grid-list [cols]="gridCols" rowHeight="220px" gutterSize="1rem" class="results-grid">
+      @for (item of paginatedWeakMatches; track trackByItemId($index, item)) {
+      <mat-grid-tile>
+        <mat-card class="result-card weak-match" [class.selected]="isSelected(item)">
+          <mat-card-content (click)="toggleSelection(item)">
+            <mat-checkbox class="result-checkbox" [checked]="isSelected(item)" (change)="toggleSelection(item)"
+              (click)="$event.stopPropagation()">
+            </mat-checkbox>
+            <img [src]="(item.thumbnail_url || item.download_url) | thumbnail:item.provider" [alt]="item.name" class="result-thumbnail"
+              loading="lazy" />
+            <p class="file-name">{{ item.name }}</p>
+          </mat-card-content>
+        </mat-card>
+      </mat-grid-tile>
+      }
+    </mat-grid-list>
+
+    <!-- Weak Matches Pagination -->
+    @if (weakTotalPages > 1) {
+    <div class="pagination-wrapper">
+      <div class="pagination-controls">
+        <button mat-icon-button [disabled]="weakCurrentPage === 1" (click)="goToWeakPage(weakCurrentPage - 1)">
+          <mat-icon>chevron_left</mat-icon>
+        </button>
+        
+        @for (page of weakPageNumbers; track page) {
+          @if (page === -1) {
+            <div class="pagination-ellipsis">...</div>
+          } @else {
+            <button mat-button 
+              [class.active]="page === weakCurrentPage"
+              (click)="goToWeakPage(page)">
+              {{ page }}
+            </button>
+          }
+        }
+        
+        <button mat-icon-button [disabled]="weakCurrentPage === weakTotalPages" (click)="goToWeakPage(weakCurrentPage + 1)">
+          <mat-icon>chevron_right</mat-icon>
+        </button>
+      </div>
+    </div>
+    }
+  </div>
+  }
+
+  <mat-card class="actions-card">
+    <mat-card-content>
+      <div class="action-buttons">
+        <button mat-stroked-button color="primary" (click)="selectAll()"
+          [attr.aria-label]="totalSelectedCount === (strongMatches.length + weakMatches.length) ? 'Deselect all photos' : 'Select all photos'">
+          <mat-icon>{{ totalSelectedCount === (strongMatches.length + weakMatches.length) ? 'check_box_outline_blank' : 'check_box' }}</mat-icon>
+          @if (totalSelectedCount === (strongMatches.length + weakMatches.length)) {
+          <span>Deselect All</span>
+          } @else {
+          <span>Select All</span>
+          }
+        </button>
+
+        <button mat-raised-button color="primary" [disabled]="totalSelectedCount === 0 || isDownloading"
+          (click)="downloadSelected()" [attr.aria-label]="'Download ' + totalSelectedCount + ' selected photos'">
+          <mat-icon>download</mat-icon>
+          @if (isDownloading) {
+          <span>Downloading...</span>
+          } @else {
+          <span>Download Selected ({{ totalSelectedCount }})</span>
+          }
+        </button>
+
+        <button mat-stroked-button color="warn" (click)="startOver()" aria-label="Start over and return to home page">
+          <mat-icon>refresh</mat-icon>
+          <span>Start Over</span>
+        </button>
+      </div>
+    </mat-card-content>
+  </mat-card>
+  } @else {
+  <mat-card class="no-results-card">
+    <mat-card-content>
+      <mat-icon class="large-icon" color="primary">sentiment_dissatisfied</mat-icon>
+      <p>No matching photos found.</p>
+      <button mat-raised-button color="primary" (click)="startOver()">
+        <mat-icon>refresh</mat-icon>
+        <span>Start Over</span>
+      </button>
+    </mat-card-content>
+  </mat-card>
+  }
+</div>

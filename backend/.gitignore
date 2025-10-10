@@ -1,0 +1,36 @@
+# Go binaries and executables
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test binaries
+*.test
+
+# Go coverage files
+*.out
+coverage.html
+
+# Go modules vendor directory
+vendor/
+
+# Go workspace file
+go.work
+
+# Go build outputs
+bin/
+build/
+dist/
+
+# Go module cache (if local)
+go.sum.backup
+
+# Air live reload tool
+tmp/
+
+# Delve debugger
+__debug_bin
+
+# Go specific temporary files
+*.prof

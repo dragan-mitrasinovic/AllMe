@@ -1,0 +1,62 @@
+services:
+  frontend:
+    container_name: allme-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        BUILD_CONFIGURATION: production  # Explicitly use production config
+    networks:
+      - allme-network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  backend:
+    container_name: allme-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - DOCKER_ENV=true
+      - FACE_SERVICE_URL=http://face-service:8081
+      - DOMAIN=${DOMAIN}
+      - FRONTEND_URL=https://${DOMAIN}
+      - ONEDRIVE_CLIENT_ID=${ONEDRIVE_CLIENT_ID}
+      - ONEDRIVE_CLIENT_SECRET=${ONEDRIVE_CLIENT_SECRET}
+      - ONEDRIVE_REDIRECT_URI=${ONEDRIVE_REDIRECT_URI}
+      - GOOGLEDRIVE_CLIENT_ID=${GOOGLEDRIVE_CLIENT_ID}
+      - GOOGLEDRIVE_CLIENT_SECRET=${GOOGLEDRIVE_CLIENT_SECRET}
+      - GOOGLEDRIVE_REDIRECT_URI=${GOOGLEDRIVE_REDIRECT_URI}
+    depends_on:
+      - face-service
+    networks:
+      - allme-network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  face-service:
+    container_name: allme-face-service
+    build:
+      context: ./face-service
+      dockerfile: Dockerfile
+    networks:
+      - allme-network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  allme-network:
+    name: allme-network
+    driver: bridge

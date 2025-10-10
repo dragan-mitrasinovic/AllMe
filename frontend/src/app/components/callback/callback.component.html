@@ -1,0 +1,18 @@
+<div class="callback-container">
+  @if (errorMessage) {
+  <mat-card class="message-card error-card">
+    <mat-card-content>
+      <mat-icon color="warn" class="large-icon">error</mat-icon>
+      <p class="message-text">{{ errorMessage }}</p>
+      <p class="redirect-text">Redirecting to home...</p>
+    </mat-card-content>
+  </mat-card>
+  } @else {
+  <mat-card class="message-card loading-card">
+    <mat-card-content>
+      <mat-spinner diameter="80" color="primary"></mat-spinner>
+      <p class="message-text">Processing Authentication</p>
+    </mat-card-content>
+  </mat-card>
+  }
+</div>

@@ -1,0 +1,76 @@
+<div class="home-container">
+  @if (showProcessingLoader) {
+  <!-- Full-screen loading overlay (same as callback component) -->
+  <div class="callback-container">
+    <mat-card class="message-card loading-card">
+      <mat-card-content>
+        <mat-spinner diameter="80" color="primary"></mat-spinner>
+        <p class="message-text">Loading Folder Contents</p>
+      </mat-card-content>
+    </mat-card>
+  </div>
+  } @else {
+  <div class="content-wrapper">
+    <mat-card class="auth-card">
+      <mat-card-content>
+        <div class="form-section" role="form" aria-label="Cloud storage authentication">
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Cloud Provider</mat-label>
+            <mat-select [(ngModel)]="selectedProvider" [disabled]="isLoading"
+              aria-label="Select cloud storage provider">
+              <mat-option value="onedrive">
+                <div class="provider-option">
+                  <span>OneDrive</span>
+                  @if (isProviderAuthenticated('onedrive')) {
+                    <span class="auth-badge">✓ Signed in</span>
+                  }
+                </div>
+              </mat-option>
+              <mat-option value="googledrive">
+                <div class="provider-option">
+                  <span>Google Drive</span>
+                  @if (isProviderAuthenticated('googledrive')) {
+                    <span class="auth-badge">✓ Signed in</span>
+                  }
+                </div>
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Folder Link</mat-label>
+            <input matInput type="text" [(ngModel)]="folderLink" placeholder="Paste your folder share link here"
+              [disabled]="isLoading" (keyup.enter)="onConnectToFolder()" aria-label="Enter folder share link"
+              aria-required="true" />
+          </mat-form-field>
+
+          @if (errorMessage) {
+          <div class="error-message" role="alert">{{ errorMessage }}</div>
+          }
+
+          <button mat-raised-button color="primary" class="connect-button full-width" (click)="onConnectToFolder()"
+            [disabled]="isLoading || !folderLink.trim()" aria-label="Connect to folder">
+            @if (isLoading) {
+            <span>Connecting...</span>
+            } @else {
+            <span>Connect to Folder</span>
+            }
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <!-- Floating sign-out button (bottom right) -->
+  @if (isProviderAuthenticated(selectedProvider)) {
+  <div class="floating-signout">
+    <button mat-fab extended color="accent" (click)="onSignOut(selectedProvider, $event)" 
+            class="signout-fab"
+            [attr.aria-label]="'Sign out from ' + (selectedProvider === 'onedrive' ? 'OneDrive' : 'Google Drive')">
+      <mat-icon>logout</mat-icon>
+      <span class="fab-text">You are signed into {{ selectedProvider === 'onedrive' ? 'OneDrive' : 'Google Drive' }} • Sign out</span>
+    </button>
+  </div>
+  }
+  }
+</div>

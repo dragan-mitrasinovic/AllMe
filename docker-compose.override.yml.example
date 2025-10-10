@@ -1,0 +1,29 @@
+# Docker Compose Override for Local Development
+# This file is automatically merged with docker-compose.yml when running locally
+# Add this to .gitignore so it doesn't affect production deployments
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        BUILD_CONFIGURATION: development  # Use development config for local builds
+    ports:
+      - "4200:4200"  # Expose frontend on localhost:4200
+    environment:
+      - NODE_ENV=development
+
+  backend:
+    ports:
+      - "8080:8080"  # Expose backend on localhost:8080
+    environment:
+      - DOMAIN=localhost:4200
+      - FRONTEND_URL=http://localhost:4200
+      # Override OAuth redirect URIs for local testing
+      - ONEDRIVE_REDIRECT_URI=http://localhost:8080/auth/onedrive/callback
+      - GOOGLEDRIVE_REDIRECT_URI=http://localhost:8080/auth/googledrive/callback
+
+  face-service:
+    ports:
+      - "8081:8081"  # Expose face service (optional, for debugging)

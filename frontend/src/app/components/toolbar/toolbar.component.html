@@ -1,0 +1,17 @@
+<mat-toolbar color="primary" class="app-toolbar" role="banner">
+  @if (showBackButton) {
+  <button mat-icon-button (click)="onBackClick()" class="back-button" [attr.aria-label]="backButtonLabel">
+    <mat-icon>arrow_back</mat-icon>
+  </button>
+  }
+  <span class="toolbar-spacer"></span>
+  <span class="app-title">AllMe - Photo Finder</span>
+  <span class="toolbar-spacer"></span>
+  <button 
+    mat-icon-button 
+    (click)="toggleTheme()"
+    [attr.aria-label]="themeService.isDarkMode() ? 'Switch to light mode' : 'Switch to dark mode'"
+    class="theme-toggle">
+    <mat-icon>{{ themeService.isDarkMode() ? 'light_mode' : 'dark_mode' }}</mat-icon>
+  </button>
+</mat-toolbar>

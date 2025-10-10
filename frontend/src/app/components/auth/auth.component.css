@@ -1,0 +1,187 @@
+.home-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--mat-sys-surface-container-low);
+}
+
+.content-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+  padding: 1rem;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 32rem;
+  padding: 1.5rem;
+}
+
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.connect-button {
+  margin-top: 0.5rem;
+  height: 3rem;
+}
+
+.error-message {
+  color: var(--mat-sys-error);
+  font-size: 0.75rem;
+  margin-top: -0.5rem;
+  padding: 0 1rem;
+}
+
+.provider-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.auth-badge {
+  color: var(--mat-sys-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
+}
+
+.auth-status-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background-color: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+  border-radius: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.status-icon {
+  color: var(--mat-sys-primary);
+  font-size: 1.25rem;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.status-text {
+  flex: 1;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.signout-button {
+  font-size: 0.75rem;
+  min-width: auto;
+  padding: 0 0.75rem;
+  height: 2rem;
+}
+
+.floating-signout {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 1000;
+}
+
+.signout-fab {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
+}
+
+.signout-fab:hover {
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+  transform: translateY(-2px);
+}
+
+.fab-text {
+  margin-left: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+@media (max-width: 37.5rem) {
+  .floating-signout {
+    bottom: 1rem;
+    right: 1rem;
+  }
+
+  .fab-text {
+    display: none;
+  }
+  
+  .signout-fab {
+    min-width: 3.5rem !important;
+    width: 3.5rem !important;
+    padding: 0 !important;
+  }
+}
+
+/* Responsive breakpoints */
+@media (max-width: 37.5rem) {
+  .content-wrapper {
+    padding: 0.5rem;
+  }
+  
+  .auth-card {
+    padding: 1rem;
+  }
+}
+
+@media (min-width: 60rem) {
+  .auth-card {
+    max-width: 40rem;
+    padding: 2rem;
+  }
+}
+
+/* Loading overlay styles (same as callback component) */
+.callback-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background-color: var(--mat-sys-surface-container-low);
+  padding: 1rem;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2000;
+}
+
+.message-card {
+  max-width: 32rem;
+  width: 100%;
+  padding: 2rem;
+}
+
+.message-card mat-card-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  text-align: center;
+}
+
+.message-text {
+  font-size: 1.5rem;
+  font-weight: 500;
+  margin: 0;
+  color: var(--mat-sys-on-surface);
+}
+
+.loading-card {
+  background-color: var(--mat-sys-surface-container-high);
+}

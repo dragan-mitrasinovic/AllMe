@@ -1,0 +1,141 @@
+
+@use '@angular/material' as mat;
+
+html {
+  @include mat.theme((
+    color: (
+      primary: mat.$azure-palette,
+      tertiary: mat.$blue-palette,
+    ),
+    typography: Roboto,
+    density: 0,
+  ));
+}
+
+body {
+  color-scheme: light;
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+  margin: 0;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+body.dark-theme {
+  @include mat.theme((
+    color: (
+      primary: mat.$azure-palette,
+      tertiary: mat.$blue-palette,
+      theme-type: dark,
+    ),
+    typography: Roboto,
+    density: 0,
+  ));
+  color-scheme: dark;
+}
+
+// Global smooth transitions and animations
+* {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+// Material component transitions
+.mat-mdc-button,
+.mat-mdc-raised-button,
+.mat-mdc-stroked-button,
+.mat-mdc-card,
+.mat-mdc-checkbox {
+  transition: all 0.2s ease;
+}
+
+// Consistent spacing using Material's 8px grid
+.mat-mdc-card {
+  margin-bottom: 1rem;
+}
+
+.mat-mdc-card-content {
+  padding: 1rem;
+}
+
+// Proper elevation for cards
+.mat-mdc-card {
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.mat-mdc-card:hover {
+  box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.15);
+}
+
+// Focus indicators for accessibility
+.mat-mdc-button:focus,
+.mat-mdc-raised-button:focus,
+.mat-mdc-stroked-button:focus {
+  outline: 0.125rem solid var(--mat-sys-primary);
+  outline-offset: 0.125rem;
+}
+
+// Keyboard navigation focus
+*:focus-visible {
+  outline: 0.125rem solid var(--mat-sys-primary);
+  outline-offset: 0.125rem;
+}
+
+// Loading states with Material progress indicators
+.mat-mdc-progress-bar {
+  border-radius: 0.25rem;
+}
+
+// Smooth animations for Material components
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mat-mdc-card {
+  animation: fadeIn 0.3s ease;
+}
+
+// Consistent button styling
+.mat-mdc-button,
+.mat-mdc-raised-button,
+.mat-mdc-stroked-button {
+  min-height: 2.5rem;
+  padding: 0 1rem;
+  font-weight: 500;
+}
+
+// Touch-friendly targets for mobile
+@media (max-width: 37.5rem) {
+  .mat-mdc-button,
+  .mat-mdc-raised-button,
+  .mat-mdc-stroked-button {
+    min-height: 2.75rem;
+  }
+}
+
+// Toolbar styling - blue in light mode, dark blue in dark mode
+.mat-toolbar.mat-primary {
+  background-color: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
+}
+
+body.dark-theme .mat-toolbar.mat-primary {
+  background-color: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+}
+
+.mat-toolbar.mat-accent {
+  background-color: var(--mat-sys-secondary);
+  color: var(--mat-sys-on-secondary);
+}
+
+.mat-toolbar.mat-warn {
+  background-color: var(--mat-sys-error);
+  color: var(--mat-sys-on-error);
+}
