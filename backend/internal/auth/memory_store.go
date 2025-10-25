@@ -18,14 +18,12 @@ type MemoryStore struct {
 	mutex sync.RWMutex
 }
 
-// NewMemoryStore creates a new in-memory store and starts cleanup goroutine
 func NewMemoryStore() *MemoryStore {
 	store := &MemoryStore{
 		states:   make(map[string]*OAuthState),
 		sessions: make(map[string]*models.UserSession),
 	}
 
-	// Start cleanup goroutine
 	go store.startCleanupRoutine()
 
 	return store
@@ -33,7 +31,6 @@ func NewMemoryStore() *MemoryStore {
 
 // === OAuth State Management (CSRF Protection) ===
 
-// GenerateState creates a new OAuth state for the given provider and session
 func (m *MemoryStore) GenerateState(provider, sessionID string) (*OAuthState, error) {
 	state, err := GenerateSecureState()
 	if err != nil {
@@ -44,7 +41,7 @@ func (m *MemoryStore) GenerateState(provider, sessionID string) (*OAuthState, er
 		State:     state,
 		Provider:  provider,
 		SessionID: sessionID,
-		ExpiresAt: time.Now().Add(10 * time.Minute), // State expires in 10 minutes
+		ExpiresAt: time.Now().Add(10 * time.Minute),
 	}
 
 	m.mutex.Lock()
@@ -54,7 +51,6 @@ func (m *MemoryStore) GenerateState(provider, sessionID string) (*OAuthState, er
 	return oauthState, nil
 }
 
-// ValidateState validates an OAuth state and returns the associated information
 func (m *MemoryStore) ValidateState(state string) (*OAuthState, error) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
@@ -71,7 +67,6 @@ func (m *MemoryStore) ValidateState(state string) (*OAuthState, error) {
 	return oauthState, nil
 }
 
-// DeleteState removes an OAuth state
 func (m *MemoryStore) DeleteState(state string) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -82,7 +77,6 @@ func (m *MemoryStore) DeleteState(state string) error {
 
 // === Session Management ===
 
-// StoreSession stores a user session with timestamps
 func (m *MemoryStore) StoreSession(session *models.UserSession) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -99,7 +93,6 @@ func (m *MemoryStore) StoreSession(session *models.UserSession) error {
 	return nil
 }
 
-// GetSession retrieves a user session by session ID and updates last accessed time
 func (m *MemoryStore) GetSession(sessionID string) (*models.UserSession, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -121,15 +114,6 @@ func (m *MemoryStore) GetSession(sessionID string) (*models.UserSession, error) 
 	return session, nil
 }
 
-// GetSessionCount returns the number of active sessions
-func (m *MemoryStore) GetSessionCount() int {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-
-	return len(m.sessions)
-}
-
-// startCleanupRoutine runs periodic cleanup of expired sessions and OAuth states
 func (m *MemoryStore) startCleanupRoutine() {
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
@@ -140,7 +124,6 @@ func (m *MemoryStore) startCleanupRoutine() {
 	}
 }
 
-// cleanupExpiredSessions removes expired sessions (24-hour TTL)
 func (m *MemoryStore) cleanupExpiredSessions() {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -153,7 +136,6 @@ func (m *MemoryStore) cleanupExpiredSessions() {
 	}
 }
 
-// cleanupExpiredStates removes expired OAuth states (10-minute TTL)
 func (m *MemoryStore) cleanupExpiredStates() {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()

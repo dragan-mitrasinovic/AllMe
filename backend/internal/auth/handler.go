@@ -3,24 +3,17 @@ package auth
 import (
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/labstack/echo/v4"
 )
 
-// Handler handles authentication-related HTTP requests
 type Handler struct {
 	authService *Service
 	frontendURL string
 }
 
-// NewHandler creates a new Handler instance
 func NewHandler(authService *Service) *Handler {
 	frontendURL := os.Getenv("FRONTEND_URL")
-	if frontendURL == "" {
-		// Fallback to localhost for local development
-		frontendURL = "http://localhost:4200"
-	}
 
 	return &Handler{
 		authService: authService,
@@ -28,16 +21,16 @@ func NewHandler(authService *Service) *Handler {
 	}
 }
 
-// RegisterRoutes registers authentication routes with the Echo instance
 func (h *Handler) RegisterRoutes(e *echo.Echo) {
-	e.GET("/auth/:provider/login", h.handleLogin)
-	e.GET("/auth/:provider/callback", h.handleCallback)
-	e.GET("/auth/validate-session", h.handleValidateSession)
-	e.DELETE("/auth/signout", h.handleSignOut)
-	e.GET("/health", h.handleHealth)
+	auth := e.Group("/auth")
+
+	auth.GET("/:provider/login", h.handleLogin)
+	auth.GET("/:provider/callback", h.handleCallback)
+	auth.GET("/validate-session", h.handleValidateSession)
+	auth.POST("/signout", h.handleSignOut)
 }
 
-// handleLogin initiates the OAuth flow for a provider
+// handleLogin initiates the OAuth flow by redirecting to the provider's auth page
 func (h *Handler) handleLogin(c echo.Context) error {
 	provider := c.Param("provider")
 	sessionID := c.QueryParam("session_id")
@@ -55,11 +48,11 @@ func (h *Handler) handleLogin(c echo.Context) error {
 		})
 	}
 
-	// Redirect to the provider's OAuth page
 	return c.Redirect(http.StatusTemporaryRedirect, authURL)
 }
 
-// handleCallback processes the OAuth callback from OneDrive or Google Drive
+// handleCallback processes the OAuth callback from the provider
+// On success or failure, redirects to the frontend with appropriate query parameters
 func (h *Handler) handleCallback(c echo.Context) error {
 	provider := c.Param("provider")
 	code := c.QueryParam("code")
@@ -94,7 +87,7 @@ func (h *Handler) handleCallback(c echo.Context) error {
 		h.frontendURL+"/callback?success=true&provider="+token.Provider)
 }
 
-// handleValidateSession checks if a session exists and has a valid token for the provider
+// handleValidateSession checks if the session is valid and has a token for the specified provider
 func (h *Handler) handleValidateSession(c echo.Context) error {
 	sessionID := c.QueryParam("session_id")
 	provider := c.QueryParam("provider")
@@ -136,7 +129,7 @@ func (h *Handler) handleValidateSession(c echo.Context) error {
 	})
 }
 
-// handleSignOut removes the token for a specific provider from the session
+// handleSignOut signs out from the specified provider by revoking the token
 func (h *Handler) handleSignOut(c echo.Context) error {
 	sessionID := c.QueryParam("session_id")
 	provider := c.QueryParam("provider")
@@ -165,17 +158,4 @@ func (h *Handler) handleSignOut(c echo.Context) error {
 		"provider": provider,
 		"message":  "Successfully signed out from " + provider,
 	})
-}
-
-// handleHealth returns the health status of the backend service
-func (h *Handler) handleHealth(c echo.Context) error {
-	sessionCount := h.authService.GetSessionCount()
-
-	response := map[string]interface{}{
-		"status":    "healthy",
-		"sessions":  sessionCount,
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
-	}
-
-	return c.JSON(http.StatusOK, response)
 }

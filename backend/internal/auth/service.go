@@ -19,7 +19,6 @@ type Service struct {
 	oneDriveAuth    Provider
 }
 
-// NewService creates a new authentication service with all dependencies
 func NewService(googleDriveAuth, oneDriveAuth Provider) *Service {
 	return &Service{
 		store:           NewMemoryStore(),
@@ -35,7 +34,6 @@ func (s *Service) InitiateOAuth(provider, sessionID string) (string, error) {
 		return "", errors.New("unsupported provider: " + provider)
 	}
 
-	// Generate secure state
 	oauthState, err := s.store.GenerateState(provider, sessionID)
 	if err != nil {
 		return "", err
@@ -61,12 +59,10 @@ func (s *Service) InitiateOAuth(provider, sessionID string) (string, error) {
 
 // HandleCallback processes the OAuth callback and exchanges code for token
 func (s *Service) HandleCallback(provider, code, state string) (*models.Token, error) {
-	// Validate provider first
 	if !s.validateProvider(provider) {
 		return nil, errors.New("unsupported provider: " + provider)
 	}
 
-	// Validate state
 	oauthState, err := s.store.ValidateState(state)
 	if err != nil {
 		return nil, err
@@ -77,16 +73,13 @@ func (s *Service) HandleCallback(provider, code, state string) (*models.Token, e
 		return nil, errors.New("provider mismatch in OAuth state")
 	}
 
-	// Clean up state after validation
 	defer s.store.DeleteState(state)
 
-	// Get provider configuration
 	config, err := s.getProviderConfig(oauthState.Provider)
 	if err != nil {
 		return nil, err
 	}
 
-	// Exchange code for token
 	token, err := s.exchangeCodeForToken(config, code)
 	if err != nil {
 		return nil, err
@@ -95,17 +88,14 @@ func (s *Service) HandleCallback(provider, code, state string) (*models.Token, e
 	// Get or create session
 	session, err := s.store.GetSession(oauthState.SessionID)
 	if err != nil {
-		// Session doesn't exist, create a new one
 		session = &models.UserSession{
 			SessionID: oauthState.SessionID,
 			Tokens:    make(map[string]*models.Token),
 		}
 	}
 
-	// Set the token for this provider in the session
 	session.SetToken(oauthState.Provider, token)
 
-	// Store the session with the updated token
 	err = s.store.StoreSession(session)
 	if err != nil {
 		return nil, err
@@ -160,7 +150,6 @@ func (s *Service) exchangeCodeForToken(config *models.OAuthConfig, code string) 
 	return token, nil
 }
 
-// getProviderConfig gets OAuth configuration from the appropriate provider
 func (s *Service) getProviderConfig(provider string) (*models.OAuthConfig, error) {
 	switch provider {
 	case "googledrive":
@@ -185,14 +174,8 @@ func (s *Service) validateProvider(provider string) bool {
 	return provider == "googledrive" || provider == "onedrive"
 }
 
-// GetSession retrieves a user session by session ID
 func (s *Service) GetSession(sessionID string) (*models.UserSession, error) {
 	return s.store.GetSession(sessionID)
-}
-
-// GetSessionCount returns the number of active sessions
-func (s *Service) GetSessionCount() int {
-	return s.store.GetSessionCount()
 }
 
 // SignOutProvider removes the token for a specific provider from the session

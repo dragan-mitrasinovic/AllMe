@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
@@ -35,6 +36,9 @@ func main() {
 }
 
 func initialize(e *echo.Echo) {
+	// Health check endpoint
+	e.GET("/health", handleHealth)
+
 	// Initialize provider services
 	googleDriveService := googledrive.NewGoogleDriveService()
 	oneDriveService := onedrive.NewOneDriveService()
@@ -68,4 +72,15 @@ func initialize(e *echo.Echo) {
 	e.Use(echoMiddleware.Recover())
 	e.Use(middleware.SecurityHeaders())
 	e.Use(middleware.CORSConfig())
+}
+
+// handleHealth returns the health status of the backend service
+func handleHealth(c echo.Context) error {
+	response := map[string]interface{}{
+		"status":    "healthy",
+		"service":   "all-me-backend",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+	}
+
+	return c.JSON(http.StatusOK, response)
 }

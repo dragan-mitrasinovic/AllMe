@@ -74,6 +74,6 @@ export class AuthService {
       .set('session_id', sessionId)
       .set('provider', provider);
     
-    return this.http.delete(`${this.apiUrl}/auth/signout`, { params });
+    return this.http.post(`${this.apiUrl}/auth/signout`, null, { params });
   }
 }
