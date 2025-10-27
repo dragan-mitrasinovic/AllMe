@@ -44,7 +44,7 @@ func CORSConfig() echo.MiddlewareFunc {
 // SecurityHeaders adds security headers to all responses
 func SecurityHeaders() echo.MiddlewareFunc {
 	domain := os.Getenv("DOMAIN")
-	
+
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			// Basic security headers
@@ -53,7 +53,7 @@ func SecurityHeaders() echo.MiddlewareFunc {
 			c.Response().Header().Set("X-XSS-Protection", "1; mode=block")
 			c.Response().Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 
-			// Content Security Policy - adjust based on your needs
+			// Content Security Policy
 			// This allows API responses but restricts script execution
 			csp := "default-src 'none'; frame-ancestors 'self'"
 			if domain != "" && !strings.Contains(domain, "localhost") {
@@ -62,7 +62,7 @@ func SecurityHeaders() echo.MiddlewareFunc {
 			c.Response().Header().Set("Content-Security-Policy", csp)
 
 			// Permissions Policy - restrict sensitive browser features
-			c.Response().Header().Set("Permissions-Policy", 
+			c.Response().Header().Set("Permissions-Policy",
 				"geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=()")
 
 			// HSTS - only for HTTPS requests
