@@ -70,8 +70,6 @@ func (h *Handler) DownloadZip(c echo.Context) error {
 
 	// Stream the ZIP archive directly to the response
 	if err := h.service.StreamZipArchive(c.Response().Writer, req.Files, token); err != nil {
-		// At this point headers are already sent, so we can't return a proper error response
-		// Log the error and the connection will be closed
 		c.Logger().Errorf("Failed to stream ZIP archive: %v", err)
 		return nil
 	}

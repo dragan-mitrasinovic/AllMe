@@ -1,20 +1,17 @@
 package download
 
 import (
-	"all-me-backend/internal/storage"
 	"all-me-backend/pkg/models"
 	"archive/zip"
 	"fmt"
 	"io"
 )
 
-// Service handles file downloads and ZIP packaging
 type Service struct {
-	storageService *storage.Service
+	storageService StorageService
 }
 
-// NewService creates a new download service
-func NewService(storageService *storage.Service) *Service {
+func NewService(storageService StorageService) *Service {
 	return &Service{
 		storageService: storageService,
 	}
