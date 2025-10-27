@@ -104,17 +104,9 @@ func (h *Handler) handleValidateSession(c echo.Context) error {
 		})
 	}
 
-	session, err := h.authService.GetSession(sessionID)
-	if err != nil {
-		// Session doesn't exist or is expired
-		return c.JSON(http.StatusOK, map[string]interface{}{
-			"valid":         false,
-			"requires_auth": true,
-		})
-	}
-
-	// Check if session has a token for the requested provider
-	if !session.HasTokenForProvider(provider) {
+	token, err := h.authService.GetSessionToken(sessionID, provider)
+	if err != nil || token == nil {
+		// Session doesn't exist, is expired, or lacks token for provider
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"valid":         false,
 			"requires_auth": true,

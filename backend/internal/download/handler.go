@@ -9,13 +9,11 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// Handler handles HTTP requests for download operations
 type Handler struct {
 	service      *Service
 	sessionStore models.SessionStore
 }
 
-// NewHandler creates a new download handler
 func NewHandler(service *Service, sessionStore models.SessionStore) *Handler {
 	return &Handler{
 		service:      service,
@@ -23,7 +21,6 @@ func NewHandler(service *Service, sessionStore models.SessionStore) *Handler {
 	}
 }
 
-// RegisterRoutes registers download routes with the Echo router
 func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.POST("/downloads/zip", h.DownloadZip)
 }
@@ -56,19 +53,10 @@ func (h *Handler) DownloadZip(c echo.Context) error {
 		})
 	}
 
-	// Get token from session
-	session, err := h.sessionStore.GetSession(req.SessionID)
+	token, err := h.sessionStore.GetSessionToken(req.SessionID, req.Provider)
 	if err != nil {
 		return c.JSON(http.StatusUnauthorized, map[string]string{
-			"error": "Session not found or expired",
-		})
-	}
-
-	// Get the token for the requested provider
-	token := session.GetToken(req.Provider)
-	if token == nil {
-		return c.JSON(http.StatusUnauthorized, map[string]string{
-			"error": fmt.Sprintf("No authentication token found for provider %s", req.Provider),
+			"error": fmt.Sprintf("Authentication failed: %v", err),
 		})
 	}
 

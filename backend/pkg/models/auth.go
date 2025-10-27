@@ -64,5 +64,5 @@ func (s *UserSession) HasTokenForProvider(provider string) bool {
 
 // SessionStore interface for retrieving sessions
 type SessionStore interface {
-	GetSession(sessionID string) (*UserSession, error)
+	GetSessionToken(sessionID, provider string) (*Token, error)
 }

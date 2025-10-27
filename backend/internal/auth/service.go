@@ -174,8 +174,9 @@ func (s *Service) validateProvider(provider string) bool {
 	return provider == "googledrive" || provider == "onedrive"
 }
 
-func (s *Service) GetSession(sessionID string) (*models.UserSession, error) {
-	return s.store.GetSession(sessionID)
+// GetSessionToken retrieves a session and returns the token for the specified provider
+func (s *Service) GetSessionToken(sessionID, provider string) (*models.Token, error) {
+	return s.store.GetSessionToken(sessionID, provider)
 }
 
 // SignOutProvider removes the token for a specific provider from the session

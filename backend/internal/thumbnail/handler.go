@@ -54,19 +54,11 @@ func (h *Handler) handleThumbnailProxy(c echo.Context) error {
 		})
 	}
 
-	// Get session and token
-	session, err := h.authService.GetSession(sessionID)
+	// Get token from session
+	token, err := h.authService.GetSessionToken(sessionID, provider)
 	if err != nil {
-		return c.JSON(http.StatusNotFound, map[string]string{
-			"error": "session not found",
-		})
-	}
-
-	// Get the token for the requested provider
-	token := session.GetToken(provider)
-	if token == nil {
-		return c.JSON(http.StatusNotFound, map[string]string{
-			"error": fmt.Sprintf("no token found for provider %s", provider),
+		return c.JSON(http.StatusUnauthorized, map[string]string{
+			"error": fmt.Sprintf("Authentication failed: %v", err),
 		})
 	}
 

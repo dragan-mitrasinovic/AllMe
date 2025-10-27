@@ -114,6 +114,21 @@ func (m *MemoryStore) GetSession(sessionID string) (*models.UserSession, error) 
 	return session, nil
 }
 
+// GetSessionToken retrieves a session and returns the token for the specified provider
+func (m *MemoryStore) GetSessionToken(sessionID, provider string) (*models.Token, error) {
+	session, err := m.GetSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	token := session.GetToken(provider)
+	if token == nil {
+		return nil, errors.New("no token found for provider: " + provider)
+	}
+
+	return token, nil
+}
+
 func (m *MemoryStore) startCleanupRoutine() {
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()

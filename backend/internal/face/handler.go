@@ -102,18 +102,10 @@ func (h *Handler) CompareFolder(c echo.Context) error {
 	}
 
 	// Get token from session
-	session, err := h.sessionStore.GetSession(req.SessionID)
+	token, err := h.sessionStore.GetSessionToken(req.SessionID, req.Provider)
 	if err != nil {
 		return c.JSON(http.StatusUnauthorized, map[string]string{
-			"error": "Session not found or expired",
-		})
-	}
-
-	// Get the token for the requested provider
-	token := session.GetToken(req.Provider)
-	if token == nil {
-		return c.JSON(http.StatusUnauthorized, map[string]string{
-			"error": fmt.Sprintf("No authentication token found for provider %s", req.Provider),
+			"error": fmt.Sprintf("Authentication failed: %v", err),
 		})
 	}
 

@@ -53,18 +53,10 @@ func (h *Handler) GetFolderContents(c echo.Context) error {
 	}
 
 	// Get token from session
-	session, err := h.sessionStore.GetSession(sessionID)
+	token, err := h.sessionStore.GetSessionToken(sessionID, provider)
 	if err != nil {
 		return c.JSON(http.StatusUnauthorized, map[string]string{
-			"error": "Session not found or expired",
-		})
-	}
-
-	// Get the token for the requested provider
-	token := session.GetToken(provider)
-	if token == nil {
-		return c.JSON(http.StatusUnauthorized, map[string]string{
-			"error": fmt.Sprintf("No authentication token found for provider %s", provider),
+			"error": fmt.Sprintf("Authentication failed: %v", err),
 		})
 	}
 

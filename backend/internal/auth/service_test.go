@@ -185,10 +185,6 @@ type mockAuthProvider struct {
 	provider string
 }
 
-func (m *mockAuthProvider) TestConnection(_ *models.Token) error {
-	return nil
-}
-
 func (m *mockAuthProvider) GetOAuthConfig() *models.OAuthConfig {
 	return &models.OAuthConfig{
 		ClientID:     "test-client-id",
