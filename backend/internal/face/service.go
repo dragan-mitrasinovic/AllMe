@@ -17,32 +17,26 @@ import (
 	"time"
 )
 
-// StorageService defines the interface for cloud storage operations needed by face service
-type StorageService interface {
-	ParseShareLink(shareURL string, token *models.Token) (*models.CloudItem, error)
-	ListImages(item *models.CloudItem, token *models.Token, recursive bool) ([]*models.CloudItem, error)
-	GetFaceRecognitionOptimizedStream(item *models.CloudItem, token *models.Token) (io.ReadCloser, error)
-}
-
-// Service handles face comparison operations
 type Service struct {
 	pythonServiceURL string
 	httpClient       *http.Client
 	storageService   StorageService
+	jobManager       *JobManager
 }
 
-// NewService creates a new face service with storage service dependency
 func NewService(storageService StorageService) *Service {
 	return &Service{
 		pythonServiceURL: os.Getenv("FACE_SERVICE_URL"),
 		httpClient: &http.Client{
-			Timeout: 10 * time.Minute,
+			Timeout: 60 * time.Minute,
 		},
 		storageService: storageService,
+		jobManager:     NewJobManager(),
 	}
 }
 
 // RegisterBaseFace registers a base face image with the Python service
+// This image is used as the reference for future comparisons in a given session
 func (s *Service) RegisterBaseFace(sessionID string, imageData []byte) error {
 	encodedImage := base64.StdEncoding.EncodeToString(imageData)
 
@@ -52,57 +46,47 @@ func (s *Service) RegisterBaseFace(sessionID string, imageData []byte) error {
 	}
 
 	var result pythonRegisterResponse
-	if err := s.callPythonService("/face/register", payload, &result); err != nil {
+	if err := s.callPythonServicePost("/face/register", payload, &result); err != nil {
 		return err
 	}
 
 	if !result.Success {
 		if result.Error != "" {
-			return errors.New(result.Error)
+			// Map Python service errors to custom error types
+			if strings.Contains(strings.ToLower(result.Error), "no face detected") {
+				return ErrNoFaceDetected
+			}
+			if strings.Contains(strings.ToLower(result.Error), "multiple faces") {
+				return ErrMultipleFaces
+			}
+			return fmt.Errorf("%w: %s", ErrInvalidImageFormat, result.Error)
 		}
-		return errors.New("registration failed")
+		return ErrInvalidImageFormat
 	}
 
 	return nil
 }
 
-// jobContext stores the context needed to process a job
-type jobContext struct {
-	allImages []*models.CloudItem
-	token     *models.Token
-}
-
-var jobContexts = make(map[string]*jobContext)
-
 // CompareFolderImages starts an async comparison job and returns the job ID
 func (s *Service) CompareFolderImages(sessionID string, folderLink string, token *models.Token, recursive bool) (string, error) {
 	folderItem, err := s.storageService.ParseShareLink(folderLink, token)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse folder link: %w", err)
+		return "", fmt.Errorf("%w: %v", ErrInvalidFolderLink, err)
 	}
 
 	allImages, err := s.storageService.ListImages(folderItem, token, recursive)
 	if err != nil {
-		return "", fmt.Errorf("failed to list images: %w", err)
+		return "", fmt.Errorf("%w: %v", ErrFolderAccess, err)
 	}
 
 	if len(allImages) == 0 {
-		return "", fmt.Errorf("no images found in folder")
+		return "", fmt.Errorf("%w: no images found in folder", ErrFolderAccess)
 	}
 
-	encodedImages, err := s.downloadAndEncodeBatch(allImages, token)
-	if err != nil {
-		return "", fmt.Errorf("failed to download and encode images: %w", err)
-	}
-
-	jobID, err := s.StartCompareBatch(sessionID, encodedImages)
+	// Process images in batches of 100
+	jobID, err := s.processFolderInBatches(sessionID, allImages, token)
 	if err != nil {
 		return "", err
-	}
-
-	jobContexts[jobID] = &jobContext{
-		allImages: allImages,
-		token:     token,
 	}
 
 	return jobID, nil
@@ -110,10 +94,69 @@ func (s *Service) CompareFolderImages(sessionID string, folderLink string, token
 
 // GetJobStatus retrieves the status of a comparison job
 func (s *Service) GetJobStatus(jobID string) (*JobStatusResponse, error) {
+	// Check if this is a batch job managed by Go
+	ctx, isBatchJob := s.jobManager.Get(jobID)
+
+	if isBatchJob {
+		// Return status from our job manager
+		response := &JobStatusResponse{
+			JobID:        jobID,
+			Status:       ctx.status,
+			CurrentImage: ctx.currentImage,
+			TotalImages:  ctx.totalImages,
+			MatchesFound: ctx.matchesFound,
+			Error:        ctx.errorMessage,
+		}
+
+		// Calculate progress percentage
+		if ctx.totalImages > 0 {
+			response.Progress = (ctx.currentImage * 100) / ctx.totalImages
+		}
+
+		// Set message
+		if ctx.status == "processing" {
+			response.Message = fmt.Sprintf("Processing image %d of %d", ctx.currentImage, ctx.totalImages)
+		} else if ctx.status == "completed" {
+			response.Message = fmt.Sprintf("Completed! Found %d matches", ctx.matchesFound)
+		} else if ctx.status == "failed" {
+			response.Message = fmt.Sprintf("Failed: %s", ctx.errorMessage)
+		}
+
+		// Map matches to cloud items if completed
+		if ctx.status == "completed" && ctx.matches != nil {
+			matchingItems := make([]*models.CloudItem, 0, len(ctx.matches))
+			for _, matchResult := range ctx.matches {
+				if matchResult.Index < len(ctx.allImages) {
+					item := ctx.allImages[matchResult.Index]
+					// Create a copy and add the match distance
+					itemCopy := *item
+					itemCopy.MatchDistance = &matchResult.Distance
+					matchingItems = append(matchingItems, &itemCopy)
+				}
+			}
+			response.Matches = matchingItems
+
+			// Clean up the job context after successful completion
+			s.jobManager.Delete(jobID)
+		}
+
+		// Also clean up on error or failed status
+		if ctx.status == "failed" || ctx.status == "error" {
+			s.jobManager.Delete(jobID)
+		}
+
+		return response, nil
+	}
+
+	// Fall back to querying Python service directly (for backwards compatibility)
 	var pythonStatus pythonJobStatusResponse
 	url := fmt.Sprintf("/face/job-status/%s", jobID)
 
 	if err := s.callPythonServiceGet(url, &pythonStatus); err != nil {
+		// Check if it's a "not found" error
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "session not found") {
+			return nil, ErrJobNotFound
+		}
 		return nil, err
 	}
 
@@ -128,88 +171,71 @@ func (s *Service) GetJobStatus(jobID string) (*JobStatusResponse, error) {
 		Error:        pythonStatus.Error,
 	}
 
-	if pythonStatus.Status == "completed" && pythonStatus.Matches != nil {
-		ctx, exists := jobContexts[jobID]
-		if exists {
-			matchingItems := make([]*models.CloudItem, 0, len(pythonStatus.Matches))
-			for _, matchResult := range pythonStatus.Matches {
-				if matchResult.Index < len(ctx.allImages) {
-					item := ctx.allImages[matchResult.Index]
-					// Create a copy and add the match distance
-					itemCopy := *item
-					itemCopy.MatchDistance = &matchResult.Distance
-					matchingItems = append(matchingItems, &itemCopy)
-				}
-			}
-			response.Matches = matchingItems
-			delete(jobContexts, jobID)
-		}
-	}
-
 	return response, nil
 }
 
-// downloadAndEncodeBatch downloads images in parallel and encodes them as base64
+// downloadAndEncodeBatch downloads images in parallel using a worker pool and encodes them as base64
 func (s *Service) downloadAndEncodeBatch(items []*models.CloudItem, token *models.Token) ([]string, error) {
-	numWorkers := 10 // Concurrent download limit
+	const numWorkers = 10
 
 	// Pre-allocate results slice to maintain order
 	results := make([]string, len(items))
 
-	// Semaphore to limit concurrent downloads
-	sem := make(chan struct{}, numWorkers)
+	// Channel for work items
+	type job struct {
+		index int
+		item  *models.CloudItem
+	}
+	jobs := make(chan job, len(items))
 
-	// Error handling
-	var firstErr error
-	var errOnce sync.Once
+	// Channel for errors
+	type result struct {
+		index   int
+		encoded string
+		err     error
+	}
+	resultsChan := make(chan result, len(items))
 
+	// Start worker pool
 	var wg sync.WaitGroup
-
-	for i, item := range items {
+	for w := 0; w < numWorkers; w++ {
 		wg.Add(1)
-		go func(idx int, itm *models.CloudItem) {
+		go func() {
 			defer wg.Done()
-
-			// Acquire semaphore
-			sem <- struct{}{}
-			defer func() { <-sem }() // Release semaphore
-
-			// Download - use FaceRecognitionOptimizedURL (800px) for face recognition if available, otherwise DownloadURL
-			itemToDownload := itm
-			if itm.FaceRecognitionOptimizedURL != "" {
-				// Create a copy with FaceRecognitionOptimizedURL as DownloadURL for face recognition
-				itemCopy := *itm
-				itemCopy.DownloadURL = itm.FaceRecognitionOptimizedURL
-				itemToDownload = &itemCopy
+			for j := range jobs {
+				encoded, err := s.downloadAndEncodeImage(j.item, token)
+				resultsChan <- result{
+					index:   j.index,
+					encoded: encoded,
+					err:     err,
+				}
 			}
-
-			stream, err := s.storageService.GetFaceRecognitionOptimizedStream(itemToDownload, token)
-			if err != nil {
-				errOnce.Do(func() {
-					firstErr = fmt.Errorf("failed to download image %s: %w", itm.Name, err)
-				})
-				return
-			}
-
-			imageData, err := io.ReadAll(stream)
-			stream.Close()
-			if err != nil {
-				errOnce.Do(func() {
-					firstErr = fmt.Errorf("failed to read image %s: %w", itm.Name, err)
-				})
-				return
-			}
-
-			// Encode
-			encoded := base64.StdEncoding.EncodeToString(imageData)
-			results[idx] = encoded
-		}(i, item)
+		}()
 	}
 
-	// Wait for all downloads to complete
-	wg.Wait()
+	// Send jobs to workers
+	for i, item := range items {
+		jobs <- job{index: i, item: item}
+	}
+	close(jobs)
 
-	// Check if any errors occurred
+	// Wait for all workers to finish
+	go func() {
+		wg.Wait()
+		close(resultsChan)
+	}()
+
+	// Collect results
+	var firstErr error
+	for res := range resultsChan {
+		if res.err != nil && firstErr == nil {
+			firstErr = res.err
+		}
+		if res.err == nil {
+			results[res.index] = res.encoded
+		}
+	}
+
 	if firstErr != nil {
 		return nil, firstErr
 	}
@@ -217,23 +243,184 @@ func (s *Service) downloadAndEncodeBatch(items []*models.CloudItem, token *model
 	return results, nil
 }
 
-// StartCompareBatch sends a batch of images to Python service for async comparison
-func (s *Service) StartCompareBatch(sessionID string, encodedImages []string) (string, error) {
+// downloadAndEncodeImage downloads a single image and encodes it to base64
+func (s *Service) downloadAndEncodeImage(item *models.CloudItem, token *models.Token) (string, error) {
+	// Use FaceRecognitionOptimizedURL if available, otherwise use DownloadURL
+	itemToDownload := item
+	if item.FaceRecognitionOptimizedURL != "" {
+		itemCopy := *item
+		itemCopy.DownloadURL = item.FaceRecognitionOptimizedURL
+		itemToDownload = &itemCopy
+	}
+
+	stream, err := s.storageService.GetFaceRecognitionOptimizedStream(itemToDownload, token)
+	if err != nil {
+		return "", fmt.Errorf("failed to download image %s: %w", item.Name, err)
+	}
+	defer stream.Close()
+
+	imageData, err := io.ReadAll(stream)
+	if err != nil {
+		return "", fmt.Errorf("failed to read image %s: %w", item.Name, err)
+	}
+
+	return base64.StdEncoding.EncodeToString(imageData), nil
+}
+
+// processFolderInBatches processes images in batches of 100 and creates a unified job
+func (s *Service) processFolderInBatches(sessionID string, allImages []*models.CloudItem, token *models.Token) (string, error) {
+	// Create a unified job ID for the client
+	unifiedJobID := fmt.Sprintf("batch-%d-%s", time.Now().Unix(), sessionID)
+
+	// Store the job context
+	s.jobManager.Store(unifiedJobID, allImages, token)
+
+	// Process batches in the background
+	go s.processBatchesBackground(unifiedJobID, sessionID, allImages, token)
+
+	return unifiedJobID, nil
+}
+
+// processBatchesBackground downloads and processes all image batches
+func (s *Service) processBatchesBackground(unifiedJobID, sessionID string, allImages []*models.CloudItem, token *models.Token) {
+	const batchSize = 100
+	totalImages := len(allImages)
+
+	// Split images into batches and send each to Python service
+	var pythonJobIDs []string
+	var batchOffsets []int // Track the starting index of each batch
+
+	for i := 0; i < totalImages; i += batchSize {
+		end := i + batchSize
+		if end > totalImages {
+			end = totalImages
+		}
+
+		batch := allImages[i:end]
+
+		// Download and encode this batch
+		encodedImages, err := s.downloadAndEncodeBatch(batch, token)
+		if err != nil {
+			// Mark job as failed
+			s.jobManager.MarkFailed(unifiedJobID, fmt.Sprintf("Failed to download batch: %v", err))
+			return
+		}
+
+		// Send batch to Python service
+		pythonJobID, err := s.startPythonCompareBatch(sessionID, encodedImages)
+		if err != nil {
+			s.jobManager.MarkFailed(unifiedJobID, fmt.Sprintf("Failed to start Python job: %v", err))
+			return
+		}
+
+		pythonJobIDs = append(pythonJobIDs, pythonJobID)
+		batchOffsets = append(batchOffsets, i)
+	}
+
+	// Poll all Python jobs and aggregate results
+	s.aggregateBatchResults(unifiedJobID, pythonJobIDs, batchOffsets, totalImages)
+}
+
+// startPythonCompareBatch sends a batch of images to Python service for async comparison
+func (s *Service) startPythonCompareBatch(sessionID string, encodedImages []string) (string, error) {
 	payload := pythonCompareBatchRequest{
 		SessionID: sessionID,
 		Images:    encodedImages,
 	}
 
 	var result pythonCompareBatchResponse
-	if err := s.callPythonService("/face/compare-batch", payload, &result); err != nil {
+	if err := s.callPythonServicePost("/face/compare-batch", payload, &result); err != nil {
 		return "", err
 	}
 
 	return result.JobID, nil
 }
 
-// callPythonService is a generic helper for making HTTP POST calls to the Python service
-func (s *Service) callPythonService(endpoint string, payload any, result any) error {
+// aggregateBatchResults polls Python jobs and combines their results
+func (s *Service) aggregateBatchResults(unifiedJobID string, pythonJobIDs []string, batchOffsets []int, totalImages int) {
+	// Track completion of all Python jobs
+	completedJobs := make(map[string]*pythonJobStatusResponse)
+
+	// Poll until all jobs complete or one fails
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	timeout := time.After(60 * time.Minute)
+
+	for {
+		select {
+		case <-timeout:
+			s.jobManager.MarkFailed(unifiedJobID, "Processing timeout")
+			return
+		case <-ticker.C:
+			allComplete := true
+			var totalProcessed int
+			var totalMatches int
+			var failedJob string
+
+			// Check status of each Python job
+			for _, pythonJobID := range pythonJobIDs {
+				if _, exists := completedJobs[pythonJobID]; exists {
+					continue
+				}
+
+				var status pythonJobStatusResponse
+				url := fmt.Sprintf("/face/job-status/%s", pythonJobID)
+				if err := s.callPythonServiceGet(url, &status); err != nil {
+					s.jobManager.MarkFailed(unifiedJobID, fmt.Sprintf("Failed to get job status: %v", err))
+					return
+				}
+
+				if status.Status == "failed" || status.Status == "error" {
+					failedJob = status.Error
+					break
+				}
+
+				if status.Status == "completed" {
+					completedJobs[pythonJobID] = &status
+				} else {
+					allComplete = false
+				}
+
+				// Update progress - add current batch progress
+				totalProcessed += status.CurrentImage
+				totalMatches += status.MatchesFound
+			}
+
+			// Update unified job progress
+			s.jobManager.UpdateProgress(unifiedJobID, totalProcessed, totalImages, totalMatches)
+
+			if failedJob != "" {
+				s.jobManager.MarkFailed(unifiedJobID, failedJob)
+				return
+			}
+
+			if allComplete {
+				// Aggregate all matches with adjusted indices
+				var allMatches []pythonMatchResult
+				for idx, pythonJobID := range pythonJobIDs {
+					jobResult := completedJobs[pythonJobID]
+					offset := batchOffsets[idx]
+
+					// Adjust match indices to global positions
+					for _, match := range jobResult.Matches {
+						adjustedMatch := pythonMatchResult{
+							Index:    match.Index + offset,
+							Distance: match.Distance,
+						}
+						allMatches = append(allMatches, adjustedMatch)
+					}
+				}
+
+				s.jobManager.MarkCompleted(unifiedJobID, allMatches)
+				return
+			}
+		}
+	}
+}
+
+// callPythonServicePost is a generic helper for making HTTP POST calls to the Python service
+func (s *Service) callPythonServicePost(endpoint string, payload any, result any) error {
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal request: %w", err)
@@ -335,22 +522,22 @@ func (s *Service) ClearReferenceImage(sessionID string) error {
 func handleNetworkError(err error, url string) error {
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
-		return errors.New("face comparison service request timed out")
+		return ErrTimeout
 	}
 
 	if errors.Is(err, context.DeadlineExceeded) {
-		return errors.New("face comparison service request timed out")
+		return ErrTimeout
 	}
 
 	if strings.Contains(err.Error(), "connection refused") {
-		return errors.New("face comparison service unavailable")
+		return ErrServiceUnavailable
 	}
 
 	if strings.Contains(err.Error(), "no such host") {
-		return errors.New("face comparison service unavailable")
+		return ErrServiceUnavailable
 	}
 
-	return errors.New("face comparison service unavailable")
+	return ErrServiceUnavailable
 }
 
 // handlePythonServiceError handles non-200 responses from Python service
@@ -359,8 +546,23 @@ func handlePythonServiceError(statusCode int, body []byte, result any) error {
 	var fastAPIError struct {
 		Detail string `json:"detail"`
 	}
+
 	if err := json.Unmarshal(body, &fastAPIError); err == nil && fastAPIError.Detail != "" {
-		return errors.New(fastAPIError.Detail)
+		errorMsg := fastAPIError.Detail
+		// Map known error messages to custom error types
+		if strings.Contains(strings.ToLower(errorMsg), "no base face") {
+			return ErrNoBaseFace
+		}
+		if strings.Contains(strings.ToLower(errorMsg), "session not found") {
+			return ErrSessionNotFound
+		}
+		if strings.Contains(strings.ToLower(errorMsg), "no face detected") {
+			return ErrNoFaceDetected
+		}
+		if strings.Contains(strings.ToLower(errorMsg), "multiple faces") {
+			return ErrMultipleFaces
+		}
+		return errors.New(errorMsg)
 	}
 
 	// Try to parse our custom error format ({"error": "message"})
@@ -368,10 +570,19 @@ func handlePythonServiceError(statusCode int, body []byte, result any) error {
 		switch v := result.(type) {
 		case *pythonRegisterResponse:
 			if v.Error != "" {
+				if strings.Contains(strings.ToLower(v.Error), "no face detected") {
+					return ErrNoFaceDetected
+				}
+				if strings.Contains(strings.ToLower(v.Error), "multiple faces") {
+					return ErrMultipleFaces
+				}
 				return errors.New(v.Error)
 			}
 		case *pythonCompareBatchResponse:
 			if v.Error != "" {
+				if strings.Contains(strings.ToLower(v.Error), "no base face") {
+					return ErrNoBaseFace
+				}
 				return errors.New(v.Error)
 			}
 		}
@@ -380,14 +591,14 @@ func handlePythonServiceError(statusCode int, body []byte, result any) error {
 	// Fallback to generic error messages based on status code
 	switch statusCode {
 	case http.StatusBadRequest:
-		return errors.New("invalid request to face comparison service")
+		return ErrInvalidImageFormat
 	case http.StatusNotFound:
-		return errors.New("session not found")
+		return ErrSessionNotFound
 	case http.StatusInternalServerError:
-		return errors.New("face comparison service encountered an error")
+		return ErrServiceUnavailable
 	case http.StatusServiceUnavailable:
-		return errors.New("face comparison service unavailable")
+		return ErrServiceUnavailable
 	default:
-		return fmt.Errorf("face comparison service returned status %d", statusCode)
+		return fmt.Errorf("%w: service returned status %d", ErrServiceUnavailable, statusCode)
 	}
 }
