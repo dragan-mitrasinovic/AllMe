@@ -8,13 +8,11 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// Handler handles HTTP requests for storage operations
 type Handler struct {
 	service      *Service
 	sessionStore models.SessionStore
 }
 
-// NewHandler creates a new storage handler
 func NewHandler(service *Service, sessionStore models.SessionStore) *Handler {
 	return &Handler{
 		service:      service,
@@ -22,7 +20,6 @@ func NewHandler(service *Service, sessionStore models.SessionStore) *Handler {
 	}
 }
 
-// RegisterRoutes registers storage routes with the Echo router
 func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	e.GET("/storage/folder-contents", h.GetFolderContents)
 }
@@ -52,7 +49,6 @@ func (h *Handler) GetFolderContents(c echo.Context) error {
 		})
 	}
 
-	// Get token from session
 	token, err := h.sessionStore.GetSessionToken(sessionID, provider)
 	if err != nil {
 		return c.JSON(http.StatusUnauthorized, map[string]string{
@@ -60,7 +56,6 @@ func (h *Handler) GetFolderContents(c echo.Context) error {
 		})
 	}
 
-	// Parse the share link to get folder information
 	folder, err := h.service.ParseShareLink(shareURL, token)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{
@@ -68,7 +63,6 @@ func (h *Handler) GetFolderContents(c echo.Context) error {
 		})
 	}
 
-	// List all contents in the folder
 	contents, err := h.service.ListFolderContents(folder, token)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
@@ -76,7 +70,6 @@ func (h *Handler) GetFolderContents(c echo.Context) error {
 		})
 	}
 
-	// Return folder metadata and all contents
 	return c.JSON(http.StatusOK, GetFolderContentsResponse{
 		Folder:   folder,
 		Contents: contents,

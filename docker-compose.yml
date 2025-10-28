@@ -5,7 +5,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        BUILD_CONFIGURATION: production  # Explicitly use production config
+        BUILD_CONFIGURATION: production
     networks:
       - allme-network
     restart: unless-stopped

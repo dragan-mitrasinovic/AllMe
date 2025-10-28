@@ -13,15 +13,12 @@ import (
 	"time"
 )
 
-// Service provides all Google Drive operations in one place
-// Implements both auth.AuthProvider and storage.StorageProvider interfaces
 type Service struct {
 	httpClient *http.Client
 	baseURL    string
 	config     *models.OAuthConfig
 }
 
-// NewGoogleDriveService creates a new Google Drive service
 func NewGoogleDriveService() *Service {
 	return &Service{
 		httpClient: &http.Client{Timeout: 30 * time.Second},
@@ -38,12 +35,10 @@ func NewGoogleDriveService() *Service {
 	}
 }
 
-// GetOAuthConfig returns the OAuth configuration for Google Drive
 func (s *Service) GetOAuthConfig() *models.OAuthConfig {
 	return s.config
 }
 
-// BuildAuthURL constructs the OAuth authorization URL for Google Drive
 func (s *Service) BuildAuthURL(state string) (string, error) {
 	params := url.Values{}
 	params.Add("client_id", s.config.ClientID)
@@ -51,7 +46,6 @@ func (s *Service) BuildAuthURL(state string) (string, error) {
 	params.Add("response_type", "code")
 	params.Add("scope", strings.Join(s.config.Scopes, " "))
 	params.Add("state", state)
-	// Google Drive doesn't need additional parameters like OneDrive
 
 	authURL := s.config.AuthURL + "?" + params.Encode()
 	return authURL, nil
@@ -437,12 +431,4 @@ func (s *Service) handleAPIError(resp *http.Response) error {
 
 	return fmt.Errorf("google Drive API error (%d): %s - %s",
 		resp.StatusCode, errorResponse.Error.Status, errorResponse.Error.Message)
-}
-
-// getEnvOrDefault returns environment variable value or default if not set
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }

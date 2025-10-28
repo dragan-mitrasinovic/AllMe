@@ -13,7 +13,6 @@ import (
 	"time"
 )
 
-// Service provides all OneDrive operations in one place
 type Service struct {
 	httpClient *http.Client
 	baseURL    string
@@ -50,20 +49,14 @@ func (s *Service) BuildAuthURL(state string) (string, error) {
 	params.Add("response_type", "code")
 	params.Add("scope", strings.Join(s.config.Scopes, " "))
 	params.Add("state", state)
-	params.Add("response_mode", "query") // OneDrive-specific parameter
+	params.Add("response_mode", "query")
 
 	authURL := s.config.AuthURL + "?" + params.Encode()
 	return authURL, nil
 }
 
-// ListFolderContents lists all items in a OneDrive folder with pagination support
-func (s *Service) ListFolderContents(item *models.CloudItem, token *models.Token, pageSize int, nextPageToken string) ([]*models.CloudItem, string, error) {
-	// Build the API URL
-	var apiURL string
-	var shareToken string
-	var currentPath string
-	var driveID string
-
+// buildAPIURL builds the appropriate API URL based on the item type and pagination token
+func (s *Service) buildAPIURL(item *models.CloudItem, pageSize int, nextPageToken string) (apiURL, shareToken, currentPath, driveID string) {
 	if nextPageToken != "" {
 		// Use the next page URL directly
 		apiURL = nextPageToken
@@ -71,72 +64,75 @@ func (s *Service) ListFolderContents(item *models.CloudItem, token *models.Token
 		shareToken = item.ParentShareToken
 		currentPath = item.ParentPath
 		driveID = item.DriveID
-	} else {
-		// Determine if this is a share token or has a parent share token
-		// Share tokens start with "u!" or "s!" (encoded share links)
-		isRootShare := strings.HasPrefix(item.ID, "u!") || strings.HasPrefix(item.ID, "s!")
-
-		// Add pagination and thumbnail parameters
-		params := url.Values{}
-		if pageSize > 0 {
-			params.Add("$top", fmt.Sprintf("%d", pageSize))
-		}
-		// Request custom thumbnail sizes: c400x400 for display, large (800px) for face recognition
-		// Format: $expand=thumbnails($select=c400x400,large)
-		params.Add("$expand", "thumbnails($select=c400x400,large)")
-
-		if isRootShare {
-			// This is the root shared folder - use shares API directly
-			shareToken = item.ID
-			currentPath = ""
-			driveID = item.DriveID
-			apiURL = fmt.Sprintf("%s/shares/%s/driveItem/children", s.baseURL, shareToken)
-		} else if item.DriveID != "" {
-			// This is a subfolder within a share - use drives API with actual drive and item IDs
-			// The shares API doesn't support subfolder navigation, but we can use the drives API
-			// with the driveId from parentReference to access subfolders reliably
-			shareToken = item.ParentShareToken
-			currentPath = item.ParentPath
-			driveID = item.DriveID
-
-			apiURL = fmt.Sprintf("%s/drives/%s/items/%s/children", s.baseURL, item.DriveID, item.ID)
-		} else {
-			// This is a regular folder in user's own drive (not a share)
-			apiURL = fmt.Sprintf("%s/me/drive/items/%s/children", s.baseURL, item.ID)
-			shareToken = ""
-			currentPath = ""
-			driveID = ""
-		}
-
-		if len(params) > 0 {
-			apiURL += "?" + params.Encode()
-		}
+		return
 	}
 
-	// Create HTTP request
+	// Determine if this is a share token or has a parent share token
+	// Share tokens start with "u!" or "s!" (encoded share links)
+	isRootShare := strings.HasPrefix(item.ID, "u!") || strings.HasPrefix(item.ID, "s!")
+
+	// Add pagination and thumbnail parameters
+	params := url.Values{}
+	if pageSize > 0 {
+		params.Add("$top", fmt.Sprintf("%d", pageSize))
+	}
+	// Request custom thumbnail sizes: c400x400 for display, large (800px) for face recognition
+	// Format: $expand=thumbnails($select=c400x400,large)
+	params.Add("$expand", "thumbnails($select=c400x400,large)")
+
+	if isRootShare {
+		// This is the root shared folder - use shares API directly
+		shareToken = item.ID
+		currentPath = ""
+		driveID = item.DriveID
+		apiURL = fmt.Sprintf("%s/shares/%s/driveItem/children", s.baseURL, shareToken)
+	} else if item.DriveID != "" {
+		// This is a subfolder within a share - use drives API with actual drive and item IDs
+		// The shares API doesn't support subfolder navigation, but we can use the drives API
+		// with the driveId from parentReference to access subfolders reliably
+		shareToken = item.ParentShareToken
+		currentPath = item.ParentPath
+		driveID = item.DriveID
+
+		apiURL = fmt.Sprintf("%s/drives/%s/items/%s/children", s.baseURL, item.DriveID, item.ID)
+	} else {
+		// This is a regular folder in user's own drive (not a share)
+		apiURL = fmt.Sprintf("%s/me/drive/items/%s/children", s.baseURL, item.ID)
+		shareToken = ""
+		currentPath = ""
+		driveID = ""
+	}
+
+	if len(params) > 0 {
+		apiURL += "?" + params.Encode()
+	}
+
+	return
+}
+
+// ListFolderContents lists all items in a OneDrive folder with pagination support
+func (s *Service) ListFolderContents(item *models.CloudItem, token *models.Token, pageSize int, nextPageToken string) ([]*models.CloudItem, string, error) {
+	apiURL, shareToken, currentPath, driveID := s.buildAPIURL(item, pageSize, nextPageToken)
+
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Add authorization header
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token.AccessToken))
 	req.Header.Set("Content-Type", "application/json")
 
-	// Execute request
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// Read response body for logging and parsing
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// Check response status
 	if resp.StatusCode != http.StatusOK {
 		return nil, "", fmt.Errorf("OneDrive list API error (status %d) for folder ID '%s' at URL '%s': %s",
 			resp.StatusCode, item.ID, apiURL, string(body))
@@ -160,7 +156,6 @@ func (s *Service) ListFolderContents(item *models.CloudItem, token *models.Token
 
 // convertDriveItemToCloudItem converts a OneDrive DriveItem to CloudItem format
 func (s *Service) convertDriveItemToCloudItem(item DriveItem, shareToken string, parentPath string, parentDriveID string) *models.CloudItem {
-	// Check if it's a folder or file
 	isFolder := item.Folder != nil
 
 	var mimeType string
