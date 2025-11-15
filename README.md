@@ -1,4 +1,4 @@
-# AllMe 📸
+# AllMe - Find yourself in large shared drives 📸
 
 <div align="center">
 
@@ -9,6 +9,16 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker)](https://docker.com/)
 
 </div>
+
+---
+
+## 🔍 Overview
+
+**AllMe** is a web application that uses facial recognition to help you find photos of yourself across your cloud storage. Upload a reference photo, connect your OneDrive or Google Drive, and let AI do the heavy lifting—no more endless scrolling through thousands of vacation photos.
+
+Results are categorized by match confidence based on facial similarity scores, and you can easily download your matches in bulk. The application supports recursive folder searches and batch processing of large photo collections.
+
+🌐 **[Visit all-me.app](https://all-me.app)**
 
 ---
 
@@ -32,16 +42,6 @@
 </p>
 
 </div>
-
----
-
-## 🔍 Overview
-
-**AllMe** is a web application that uses facial recognition to help you find photos of yourself across your cloud storage. Upload a reference photo, connect your OneDrive or Google Drive, and let AI do the heavy lifting—no more endless scrolling through thousands of vacation photos.
-
-Results are categorized by match confidence based on facial similarity scores, and you can easily download your matches in bulk. The application supports recursive folder searches and batch processing of large photo collections.
-
-🌐 **[Visit all-me.app](https://all-me.app)**
 
 ---
 
