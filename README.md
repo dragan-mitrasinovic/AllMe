@@ -2,8 +2,6 @@
 
 <div align="center">
 
-**AI-Powered Face Search Across Your Cloud Storage**
-
 [![Live App](https://img.shields.io/badge/live-all--me.app-blue?style=for-the-badge)](https://all-me.app)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?style=for-the-badge&logo=go)](https://go.dev/)
 [![Angular](https://img.shields.io/badge/Angular-20-DD0031?style=for-the-badge&logo=angular)](https://angular.dev/)
@@ -18,39 +16,20 @@
 
 <div align="center">
 
-![AllMe App Demo](./screenshots/demo.gif)
+<p float="left">
+  <img src="./assets/start.png" width="49%" />
+  <img src="./assets/gallery.png" width="49%" />
+</p>
 
-*Find yourself in thousands of photos across your cloud storage in seconds*
+<p float="left">
+  <img src="./assets/search.png" width="49%" />
+  <img src="./assets/search_selected.png" width="49%" />
+</p>
 
-### Application Flow
-
-<table>
-  <tr>
-    <td align="center">
-      <img src="./screenshots/auth.png" alt="Authentication" width="250"/>
-      <br />
-      <b>1. Connect Storage</b>
-      <br />
-      <sub>OneDrive or Google Drive</sub>
-    </td>
-    <td align="center">
-      <img src="./screenshots/search.png" alt="Search" width="250"/>
-      <br />
-      <b>2. Upload Reference</b>
-      <br />
-      <sub>Your photo to search for</sub>
-    </td>
-    <td align="center">
-      <img src="./screenshots/results.png" alt="Results" width="250"/>
-      <br />
-      <b>3. Get Results</b>
-      <br />
-      <sub>Matched photos with confidence</sub>
-    </td>
-  </tr>
-</table>
-
-> **Note:** Add your screenshots to a `screenshots/` folder in the repository
+<p float="left">
+  <img src="./assets/loading.png" width="49%" />
+  <img src="./assets/results.png" width="49%" />
+</p>
 
 </div>
 
