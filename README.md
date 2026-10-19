@@ -17,8 +17,6 @@
 
 Results are categorized by match confidence based on facial similarity scores, and you can easily download your matches in bulk. The application supports recursive folder searches and batch processing of large photo collections.
 
-🌐 **[Visit all-me.app](https://all-me.app)**
-
 ---
 
 ## 📸 Screenshots
