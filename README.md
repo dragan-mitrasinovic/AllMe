@@ -2,7 +2,6 @@
 
 <div align="center">
 
-[![Live App](https://img.shields.io/badge/live-all--me.app-blue?style=for-the-badge)](https://all-me.app)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?style=for-the-badge&logo=go)](https://go.dev/)
 [![Angular](https://img.shields.io/badge/Angular-20-DD0031?style=for-the-badge&logo=angular)](https://angular.dev/)
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python)](https://python.org/)
