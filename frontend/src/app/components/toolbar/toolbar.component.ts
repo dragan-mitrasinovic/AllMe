@@ -1,17 +1,18 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, ChangeDetectionStrategy } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { ThemeService } from '../../services/theme.service';
-import { CommonModule } from '@angular/common';
+
 import { filter } from 'rxjs/operators';
 
 @Component({
   selector: 'app-toolbar',
   templateUrl: './toolbar.component.html',
   styleUrl: './toolbar.component.css',
-  imports: [CommonModule, MatToolbarModule, MatIconModule, MatButtonModule]
+  changeDetection: ChangeDetectionStrategy.Eager,
+  imports: [MatToolbarModule, MatIconModule, MatButtonModule]
 })
 export class ToolbarComponent {
   themeService = inject(ThemeService);

@@ -1,5 +1,5 @@
-import { Component, OnInit, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
+
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatCardModule } from '@angular/material/card';
@@ -12,12 +12,12 @@ import { FaceService } from '../../services/face.service';
   selector: 'app-callback',
   templateUrl: './callback.component.html',
   styleUrl: './callback.component.css',
+  changeDetection: ChangeDetectionStrategy.Eager,
   imports: [
-    CommonModule,
     MatProgressSpinnerModule,
     MatCardModule,
     MatIconModule
-  ]
+]
 })
 export class CallbackComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);

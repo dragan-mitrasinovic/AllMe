@@ -1,5 +1,5 @@
-import { Component, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, inject, ChangeDetectionStrategy } from '@angular/core';
+
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
@@ -17,8 +17,8 @@ import { FaceService } from '../../services/face.service';
   selector: 'app-auth',
   templateUrl: './auth.component.html',
   styleUrl: './auth.component.css',
+  changeDetection: ChangeDetectionStrategy.Eager,
   imports: [
-    CommonModule, 
     FormsModule,
     MatCardModule,
     MatFormFieldModule,
@@ -27,7 +27,7 @@ import { FaceService } from '../../services/face.service';
     MatButtonModule,
     MatIconModule,
     MatProgressSpinnerModule
-  ]
+]
 })
 export class AuthComponent {
   private readonly authService = inject(AuthService);

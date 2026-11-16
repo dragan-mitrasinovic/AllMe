@@ -1,13 +1,14 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { RouterOutlet, Router, NavigationEnd } from '@angular/router';
-import { CommonModule } from '@angular/common';
+
 import { filter } from 'rxjs/operators';
 import { ToolbarComponent } from './components/toolbar/toolbar.component';
 
 @Component({
   selector: 'app-root',
-  imports: [CommonModule, RouterOutlet, ToolbarComponent],
+  imports: [RouterOutlet, ToolbarComponent],
   templateUrl: './app.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './app.css'
 })
 export class App {

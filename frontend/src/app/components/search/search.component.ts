@@ -1,5 +1,5 @@
-import { Component, OnInit, OnDestroy, inject, ViewChild, ElementRef } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnInit, OnDestroy, inject, ViewChild, ElementRef, ChangeDetectionStrategy } from '@angular/core';
+
 import { Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatGridListModule } from '@angular/material/grid-list';
@@ -25,8 +25,8 @@ import { ThumbnailPipe } from '../../pipes/thumbnail.pipe';
   selector: 'app-search',
   templateUrl: './search.component.html',
   styleUrl: './search.component.css',
+  changeDetection: ChangeDetectionStrategy.Eager,
   imports: [
-    CommonModule,
     MatCardModule,
     MatGridListModule,
     MatButtonModule,
@@ -40,7 +40,7 @@ import { ThumbnailPipe } from '../../pipes/thumbnail.pipe';
     MatPaginatorModule,
     FormsModule,
     ThumbnailPipe
-  ]
+]
 })
 export class SearchComponent implements OnInit, OnDestroy {
   @ViewChild('uploadSection', { read: ElementRef }) uploadSection!: ElementRef;
@@ -82,7 +82,7 @@ export class SearchComponent implements OnInit, OnDestroy {
   paginatedContents: CloudItem[] = [];
 
   ngOnInit(): void {
-    const navigation = this.router.getCurrentNavigation();
+    const navigation = this.router.currentNavigation();
     const state = navigation?.extras?.state || history.state;
 
     // Try to get from navigation state first, then from sessionStorage

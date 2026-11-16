@@ -1,5 +1,5 @@
 # Build the Angular app, then serve it with nginx, which also proxies /api/* to the backend.
-FROM node:20-alpine AS build
+FROM node:24.22.3-alpine AS build
 
 WORKDIR /app
 
@@ -13,7 +13,7 @@ COPY . .
 RUN npm run build -- --configuration ${BUILD_CONFIGURATION}
 
 # Unprivileged nginx (runs as a non-root user, listens on 8080)
-FROM nginxinc/nginx-unprivileged:1.29-alpine
+FROM nginxinc/nginx-unprivileged:1.30-alpine
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist/frontend/browser /usr/share/nginx/html

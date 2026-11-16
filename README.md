@@ -2,9 +2,9 @@
 
 <div align="center">
 
-[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?style=for-the-badge&logo=go)](https://go.dev/)
-[![Angular](https://img.shields.io/badge/Angular-20-DD0031?style=for-the-badge&logo=angular)](https://angular.dev/)
-[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python)](https://python.org/)
+[![Go](https://img.shields.io/badge/Go-1.27-00ADD8?style=for-the-badge&logo=go)](https://go.dev/)
+[![Angular](https://img.shields.io/badge/Angular-22-DD0031?style=for-the-badge&logo=angular)](https://angular.dev/)
+[![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python)](https://python.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker)](https://docker.com/)
 
 </div>
@@ -82,21 +82,21 @@ AllMe is built as a microservices architecture with three main components:
 
 ### Component Details
 
-#### Frontend (Angular 20)
-- **Framework:** Angular 20 with standalone components
+#### Frontend (Angular 22)
+- **Framework:** Angular 22 with standalone components
 - **UI Library:** Angular Material for consistent design
 - **State Management:** RxJS observables for reactive data flow
 - **HTTP Client:** Interceptors for authentication and error handling
 - **Routing:** Protected routes with navigation state
 
-#### Backend (Go 1.25)
+#### Backend (Go 1.27)
 - **Framework:** Echo v4 - High-performance HTTP router
 - **Architecture:** Clean architecture with dependency injection
 - **Providers:** Abstracted interfaces for OneDrive and Google Drive
 - **Concurrency:** Goroutines for parallel batch processing
 - **Security:** Middleware for CORS, headers, and authentication
 
-#### Face Service (Python 3.11)
+#### Face Service (Python 3.14)
 - **Framework:** FastAPI for async API handling
 - **ML Library:** face_recognition (built on dlib)
 - **Image Processing:** Pillow for format handling
@@ -109,7 +109,7 @@ AllMe is built as a microservices architecture with three main components:
 
 ```
 AllMe/
-├── frontend/                           # Angular 20 SPA
+├── frontend/                           # Angular 22 SPA
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── components/            # UI components
@@ -157,10 +157,9 @@ AllMe/
 - **OAuth Credentials** from Microsoft and/or Google
 
 ### For Local Development
-- **Node.js** 18+ and **npm** 9+
-- **Go** 1.25+
-- **Python** 3.11+
-- **CMake** and **dlib** (for face_recognition library)
+- **Node.js** 24 LTS (npm 11.10+, so `frontend/.npmrc` takes effect)
+- **Go** 1.27+
+- **Python** 3.14 (prebuilt `dlib-bin` wheels, no CMake or compiler needed)
 
 ---
 
@@ -234,7 +233,7 @@ go run main.go  # http://localhost:8080
 
 # Face Service
 cd face-service
-pip install -r requirements.txt
+pip install -r requirements.txt && pip install --no-deps face-recognition==1.3.0
 uvicorn main:app --host 0.0.0.0 --port 8081
 ```
 
@@ -284,3 +283,17 @@ POST /face/compare-batch          # Compare batch of images
 GET  /face/job-status/:jobId      # Get processing status
 GET  /health                      # Health check
 ```
+
+---
+
+## 🔄 Dependency updates
+
+Dependabot (`.github/dependabot.yml`) opens PRs every Saturday for all three services: one grouped PR per ecosystem for minor/patch updates (npm in `frontend/`, Go modules in `backend/`, pip in `face-service/`), separate PRs for majors, and PRs for the base images in each `Dockerfile`. New releases wait out a cooldown first (3 days for patches, 7 for minors, 30 for majors, 7 for images); security fixes come at once, and Dependabot alerts and security updates are enabled on the repo.
+
+Some upgrades are done by hand on purpose:
+
+- **Angular and TypeScript majors**: run `npx ng update @angular/core@<next> @angular/cli@<next> @angular/material@<next> @angular/cdk@<next>` one major at a time, so the code migrations run.
+- **Node.js majors** (the `node` image): also bump `packageManager` in `frontend/package.json` to the npm that ships with it.
+- **setuptools** stays below 81, because `face_recognition_models` still imports `pkg_resources`.
+
+`frontend/.npmrc` gives manual installs the same protection: `min-release-age=3` skips versions younger than 3 days and `ignore-scripts=true` skips install scripts. Dependabot only bumps direct dependencies, so refresh the rest about once a month with `npm update && npm test && npm run build` in `frontend/` and commit the lockfile.

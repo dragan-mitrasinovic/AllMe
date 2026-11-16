@@ -1,5 +1,5 @@
-import { Component, OnInit, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
+
 import { Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -18,15 +18,15 @@ import { ThumbnailPipe } from '../../pipes/thumbnail.pipe';
   selector: 'app-results',
   templateUrl: './results.component.html',
   styleUrl: './results.component.css',
+  changeDetection: ChangeDetectionStrategy.Eager,
   imports: [
-    CommonModule,
     MatCardModule,
     MatCheckboxModule,
     MatButtonModule,
     MatIconModule,
     MatGridListModule,
     ThumbnailPipe
-  ]
+]
 })
 export class ResultsComponent implements OnInit {
   private readonly router = inject(Router);
@@ -58,7 +58,7 @@ export class ResultsComponent implements OnInit {
   weakTotalPages = 1;
 
   ngOnInit(): void {
-    const navigation = this.router.getCurrentNavigation();
+    const navigation = this.router.currentNavigation();
     const state = navigation?.extras?.state || history.state;
     
     if (state && state.matches) {

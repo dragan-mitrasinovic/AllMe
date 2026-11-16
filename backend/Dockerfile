@@ -1,5 +1,5 @@
 # Multi-stage build for Go backend
-FROM golang:1.25.1-alpine AS builder
+FROM golang:1.27.3-alpine AS builder
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o main .
 
 # Final stage - minimal runtime image
-FROM alpine:3.22
+FROM alpine:3.23
 
 # Install ca-certificates for OAuth HTTPS calls
 RUN apk --no-cache add ca-certificates && addgroup -S app && adduser -S -G app -H app
