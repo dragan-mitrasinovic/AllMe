@@ -13,7 +13,7 @@ COPY . .
 RUN npm run build -- --configuration ${BUILD_CONFIGURATION}
 
 # Unprivileged nginx (runs as a non-root user, listens on 8080)
-FROM nginxinc/nginx-unprivileged:1.30-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist/frontend/browser /usr/share/nginx/html
