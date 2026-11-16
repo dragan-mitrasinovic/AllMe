@@ -5,7 +5,5 @@ uvicorn==0.54.0
 dlib-bin==20.0.1.post1
 face-recognition-models==0.3.0
 click==8.5.1
-# face_recognition_models uses pkg_resources, removed from newer setuptools.
-setuptools==80.10.2
 pillow==13.0.0
 numpy==2.5.4

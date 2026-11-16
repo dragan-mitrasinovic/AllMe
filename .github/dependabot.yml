@@ -56,10 +56,6 @@ updates:
       minor-and-patch:
         update-types: [minor, patch]
     open-pull-requests-limit: 5
-    ignore:
-      # face_recognition_models imports pkg_resources, which setuptools 81+ removes.
-      - dependency-name: "setuptools"
-        versions: [">=81"]
 
   - package-ecosystem: docker
     directories: [/frontend, /backend, /face-service]

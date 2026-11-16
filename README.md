@@ -294,6 +294,5 @@ Some upgrades are done by hand on purpose:
 
 - **Angular and TypeScript majors**: run `npx ng update @angular/core@<next> @angular/cli@<next> @angular/material@<next> @angular/cdk@<next>` one major at a time, so the code migrations run.
 - **Node.js majors** (the `node` image): also bump `packageManager` in `frontend/package.json` to the npm that ships with it.
-- **setuptools** stays below 81, because `face_recognition_models` still imports `pkg_resources`.
 
 `frontend/.npmrc` gives manual installs the same protection: `min-release-age=3` skips versions younger than 3 days and `ignore-scripts=true` skips install scripts. Dependabot only bumps direct dependencies, so refresh the rest about once a month with `npm update && npm test && npm run build` in `frontend/` and commit the lockfile.
