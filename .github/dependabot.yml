@@ -1,0 +1,77 @@
+# Weekly dependency update PRs. Cooldowns skip brand-new releases (supply-chain protection);
+# security updates ignore the cooldown and arrive right away. Keep the cooldowns >= min-release-age in frontend/.npmrc.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "06:00"
+      timezone: Europe/Belgrade
+    cooldown:
+      default-days: 3
+      semver-minor-days: 7
+      semver-major-days: 30
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+    ignore:
+      # Angular majors go through `ng update` (moves all packages together, runs code migrations,
+      # and Angular pins the TypeScript version it supports).
+      - dependency-name: "@angular/*"
+        update-types: [version-update:semver-major]
+      - dependency-name: "typescript"
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: gomod
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "06:00"
+      timezone: Europe/Belgrade
+    cooldown:
+      default-days: 3
+      semver-minor-days: 7
+      semver-major-days: 30
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: pip
+    directory: /face-service
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "06:00"
+      timezone: Europe/Belgrade
+    cooldown:
+      default-days: 3
+      semver-minor-days: 7
+      semver-major-days: 30
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+    ignore:
+      # face_recognition_models imports pkg_resources, which setuptools 81+ removes.
+      - dependency-name: "setuptools"
+        versions: [">=81"]
+
+  - package-ecosystem: docker
+    directories: [/frontend, /backend, /face-service]
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "06:00"
+      timezone: Europe/Belgrade
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    ignore:
+      # Major Node.js upgrades are done by hand (they also touch packageManager and Angular's engine range).
+      - dependency-name: node
+        update-types: [version-update:semver-major]
