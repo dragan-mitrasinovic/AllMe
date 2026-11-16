@@ -39,3 +39,7 @@ temp/
 # Test 
 data files
 backend/test/testdata/
+
+# Python bytecode
+__pycache__/
+*.pyc

@@ -1,24 +1,24 @@
-# Build Angular for production
-FROM node:20-alpine
+# Build the Angular app, then serve it with nginx, which also proxies /api/* to the backend.
+FROM node:20-alpine AS build
 
 WORKDIR /app
 
 # Accept build configuration as argument (defaults to production)
 ARG BUILD_CONFIGURATION=production
 
-# Copy package files and install dependencies
 COPY package*.json ./
 RUN npm ci
 
-# Copy source code and build with the specified configuration
 COPY . .
 RUN npm run build -- --configuration ${BUILD_CONFIGURATION}
 
-# Install a simple static file server
-RUN npm install -g serve
+# Unprivileged nginx (runs as a non-root user, listens on 8080)
+FROM nginxinc/nginx-unprivileged:1.29-alpine
 
-# Expose port 4200
-EXPOSE 4200
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist/frontend/browser /usr/share/nginx/html
 
-# Serve the built Angular app
-CMD ["serve", "-s", "dist/frontend/browser", "-l", "4200"]
+EXPOSE 8080
+
+HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1

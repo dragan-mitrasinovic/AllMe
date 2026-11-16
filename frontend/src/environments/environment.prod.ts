@@ -1,4 +1,5 @@
 export const environment = {
   production: true,
-  apiUrl: 'https://api.all-me.app'
+  // Same origin: nginx in the frontend container proxies /api/* to the backend.
+  apiUrl: '/api'
 };

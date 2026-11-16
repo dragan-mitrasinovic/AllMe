@@ -178,20 +178,21 @@ cd AllMe
 Create a `.env` file in the project root:
 
 ```env
-# Domain Configuration
-DOMAIN=all-me.app
-FRONTEND_URL=https://all-me.app
+# Domain the app is served on
+DOMAIN=your-domain.com
 
 # OneDrive OAuth (Register at https://portal.azure.com)
 ONEDRIVE_CLIENT_ID=your_onedrive_client_id
 ONEDRIVE_CLIENT_SECRET=your_onedrive_client_secret
-ONEDRIVE_REDIRECT_URI=https://all-me.app/auth/onedrive/callback
+ONEDRIVE_REDIRECT_URI=https://your-domain.com/api/auth/onedrive/callback
 
 # Google Drive OAuth (Register at https://console.cloud.google.com)
 GOOGLEDRIVE_CLIENT_ID=your_googledrive_client_id
 GOOGLEDRIVE_CLIENT_SECRET=your_googledrive_client_secret
-GOOGLEDRIVE_REDIRECT_URI=https://all-me.app/auth/googledrive/callback
+GOOGLEDRIVE_REDIRECT_URI=https://your-domain.com/api/auth/googledrive/callback
 ```
+
+In production everything is served from one origin: the frontend container (nginx) serves the Angular app and proxies `/api/*` to the backend, so the backend routes listed below are reachable under `https://your-domain.com/api/...`. Only the frontend container needs a public domain; the backend and face service stay on the internal Docker network.
 
 ### 3. Local Development Configuration
 
@@ -201,7 +202,7 @@ GOOGLEDRIVE_REDIRECT_URI=https://all-me.app/auth/googledrive/callback
 cp docker-compose.override.yml.example docker-compose.override.yml
 ```
 
-Edit `docker-compose.override.yml` to configure local ports and development URLs (e.g., `localhost:4200`, `localhost:8080`).
+Edit `docker-compose.override.yml` to configure local ports and development URLs (e.g., `localhost:4200`, `localhost:8080`). The development build calls the backend directly at `http://localhost:8080`.
 
 ### 4. Run with Docker Compose
 
@@ -241,7 +242,7 @@ uvicorn main:app --host 0.0.0.0 --port 8081
 
 ## 🧪 API Endpoints
 
-### Backend API (Port 8080)
+### Backend API (Port 8080, `/api/*` behind the frontend in production)
 
 #### Authentication
 ```

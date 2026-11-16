@@ -5,14 +5,10 @@
 services:
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
       args:
-        BUILD_CONFIGURATION: development  # Use development config for local builds
+        BUILD_CONFIGURATION: development  # Dev build calls the backend directly at localhost:8080
     ports:
-      - "4200:4200"  # Expose frontend on localhost:4200
-    environment:
-      - NODE_ENV=development
+      - "4200:8080"  # Expose frontend (nginx) on localhost:4200
 
   backend:
     ports:

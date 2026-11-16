@@ -1,25 +1,30 @@
+# Production stack. Only the frontend is public: its nginx serves the Angular app and proxies /api/* to the
+# backend, so everything runs on one origin. Backend and face-service are reachable only inside this network.
 services:
   frontend:
-    container_name: allme-frontend
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
         BUILD_CONFIGURATION: production
-    networks:
-      - allme-network
+    expose:
+      - "8080"
+    depends_on:
+      - backend
     restart: unless-stopped
-    logging:
+    mem_limit: 128m
+    logging: &logging
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
   backend:
-    container_name: allme-backend
     build:
       context: ./backend
       dockerfile: Dockerfile
+    expose:
+      - "8080"
     environment:
       - DOCKER_ENV=true
       - FACE_SERVICE_URL=http://face-service:8081
@@ -33,30 +38,16 @@ services:
       - GOOGLEDRIVE_REDIRECT_URI=${GOOGLEDRIVE_REDIRECT_URI}
     depends_on:
       - face-service
-    networks:
-      - allme-network
     restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    mem_limit: 512m
+    logging: *logging
 
   face-service:
-    container_name: allme-face-service
     build:
       context: ./face-service
       dockerfile: Dockerfile
-    networks:
-      - allme-network
+    expose:
+      - "8081"
     restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-networks:
-  allme-network:
-    name: allme-network
-    driver: bridge
+    mem_limit: 2g
+    logging: *logging
