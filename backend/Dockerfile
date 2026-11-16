@@ -14,7 +14,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o main .
 
 # Final stage - minimal runtime image
-FROM alpine:3.23
+FROM alpine:3.24
 
 # Install ca-certificates for OAuth HTTPS calls
 RUN apk --no-cache add ca-certificates && addgroup -S app && adduser -S -G app -H app
