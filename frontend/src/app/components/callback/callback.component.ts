@@ -34,8 +34,11 @@ export class CallbackComponent implements OnInit {
       const provider = params['provider'];
 
       if (error) {
-        const message = params['message'] || params['error_description'] || 'Authentication failed';
-        this.errorMessage = message;
+        // Only known codes are shown; text from the URL is never displayed, so a crafted link can't put
+        // arbitrary messages on the page.
+        this.errorMessage = error === 'access_denied'
+          ? 'Sign-in was cancelled.'
+          : 'Sign-in failed. Please try again.';
         this.isProcessing = false;
         setTimeout(() => this.router.navigate(['/']), 3000);
         return;

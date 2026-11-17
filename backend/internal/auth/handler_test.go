@@ -167,3 +167,21 @@ func TestSignOut_LastProviderEndsSession(t *testing.T) {
 		t.Error("expected the session to be deleted")
 	}
 }
+
+func TestCallback_RedirectCarriesOnlyKnownEncodedCodes(t *testing.T) {
+	e, _ := newTestApp(t)
+
+	for query, want := range map[string]string{
+		"error=access_denied&error_description=Your+account+is+locked%2C+call+555": "error=access_denied",
+		"error=server_error%26evil%3D1&error_description=x":                        "error=auth_failed",
+		"code=c&state=unknown-state":                                               "error=auth_failed",
+	} {
+		loc, err := url.Parse(do(e, http.MethodGet, "/auth/onedrive/callback?"+query, "").Header().Get("Location"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if loc.RawQuery != want {
+			t.Errorf("%s: redirected with %q, want %q", query, loc.RawQuery, want)
+		}
+	}
+}

@@ -1,6 +1,7 @@
 package googledrive
 
 import (
+	"all-me-backend/internal/urlguard"
 	"all-me-backend/pkg/models"
 	"encoding/json"
 	"fmt"
@@ -21,7 +22,7 @@ type Service struct {
 
 func NewGoogleDriveService() *Service {
 	return &Service{
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient: urlguard.GoogleDrive.Client(30 * time.Second),
 		baseURL:    "https://www.googleapis.com/drive/v3",
 		config: &models.OAuthConfig{
 			ClientID:     os.Getenv("GOOGLEDRIVE_CLIENT_ID"),
@@ -87,7 +88,7 @@ func (s *Service) ListFolderContents(item *models.CloudItem, token *models.Token
 	// Execute request
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to execute request: %w", err)
+		return nil, "", fmt.Errorf("failed to execute request: %w", urlguard.RedactURL(err))
 	}
 	defer resp.Body.Close()
 
@@ -170,22 +171,24 @@ func (s *Service) GetThumbnailStream(thumbnailURL string, token *models.Token) (
 		return nil, fmt.Errorf("thumbnail URL is empty")
 	}
 
-	// Google Drive thumbnail URLs from the API (thumbnailLink) need authentication
-	// CDN URLs (lh3.googleusercontent.com) don't need authentication
-	needsAuth := strings.Contains(thumbnailURL, "googleapis.com")
+	u, err := urlguard.GoogleDrive.Check(thumbnailURL)
+	if err != nil {
+		return nil, err
+	}
 
-	req, err := http.NewRequest("GET", thumbnailURL, nil)
+	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create thumbnail request: %w", err)
 	}
 
-	if needsAuth {
+	// Drive API URLs need the token; content-host URLs (*.googleusercontent.com) don't
+	if needsToken(u) {
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token.AccessToken))
 	}
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch thumbnail: %w", err)
+		return nil, fmt.Errorf("failed to fetch thumbnail: %w", urlguard.RedactURL(err))
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -197,17 +200,24 @@ func (s *Service) GetThumbnailStream(thumbnailURL string, token *models.Token) (
 }
 
 // downloadFromURL is a helper to download from any Google Drive URL
-func (s *Service) downloadFromURL(url string, token *models.Token) (io.ReadCloser, error) {
-	req, err := http.NewRequest("GET", url, nil)
+func (s *Service) downloadFromURL(rawURL string, token *models.Token) (io.ReadCloser, error) {
+	u, err := urlguard.GoogleDrive.Check(rawURL)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create download request: %w", err)
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token.AccessToken))
+	if needsToken(u) {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token.AccessToken))
+	}
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute download request: %w", err)
+		return nil, fmt.Errorf("failed to execute download request: %w", urlguard.RedactURL(err))
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -216,6 +226,11 @@ func (s *Service) downloadFromURL(url string, token *models.Token) (io.ReadClose
 	}
 
 	return resp.Body, nil
+}
+
+// needsToken reports whether a URL is on the Drive API host, the only host that gets the access token.
+func needsToken(u *url.URL) bool {
+	return urlguard.IsHost(u, "www.googleapis.com")
 }
 
 // ParseShareLink parses a Google Drive share link to extract folder information and fetch folder details
@@ -269,7 +284,7 @@ func (s *Service) getFolderInfo(folderID string, token *models.Token) (*models.C
 	// Execute request
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
+		return nil, fmt.Errorf("failed to execute request: %w", urlguard.RedactURL(err))
 	}
 	defer resp.Body.Close()
 

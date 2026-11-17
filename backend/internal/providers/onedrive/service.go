@@ -1,6 +1,7 @@
 package onedrive
 
 import (
+	"all-me-backend/internal/urlguard"
 	"all-me-backend/pkg/models"
 	"encoding/base64"
 	"encoding/json"
@@ -22,7 +23,7 @@ type Service struct {
 // NewOneDriveService creates a new OneDrive service
 func NewOneDriveService() *Service {
 	return &Service{
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient: urlguard.OneDrive.Client(30 * time.Second),
 		baseURL:    "https://graph.microsoft.com/v1.0",
 		config: &models.OAuthConfig{
 			ClientID:     os.Getenv("ONEDRIVE_CLIENT_ID"),
@@ -114,6 +115,11 @@ func (s *Service) buildAPIURL(item *models.CloudItem, pageSize int, nextPageToke
 func (s *Service) ListFolderContents(item *models.CloudItem, token *models.Token, pageSize int, nextPageToken string) ([]*models.CloudItem, string, error) {
 	apiURL, shareToken, currentPath, driveID := s.buildAPIURL(item, pageSize, nextPageToken)
 
+	// apiURL may be Graph's @odata.nextLink
+	if _, err := urlguard.OneDrive.Check(apiURL); err != nil {
+		return nil, "", err
+	}
+
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to create request: %w", err)
@@ -124,7 +130,7 @@ func (s *Service) ListFolderContents(item *models.CloudItem, token *models.Token
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to execute request: %w", err)
+		return nil, "", fmt.Errorf("failed to execute request: %w", urlguard.RedactURL(err))
 	}
 	defer resp.Body.Close()
 
@@ -251,21 +257,26 @@ func (s *Service) GetThumbnailStream(thumbnailURL string, token *models.Token) (
 }
 
 // downloadFromURL is a helper to download from any OneDrive URL
-func (s *Service) downloadFromURL(url string, token *models.Token) (io.ReadCloser, error) {
-	downloadReq, err := http.NewRequest("GET", url, nil)
+func (s *Service) downloadFromURL(rawURL string, token *models.Token) (io.ReadCloser, error) {
+	u, err := urlguard.OneDrive.Check(rawURL)
+	if err != nil {
+		return nil, err
+	}
+
+	downloadReq, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create download request: %w", err)
 	}
 
 	// Add authorization header for API URLs (shares API and thumbnails require auth)
 	// Regular download URLs from @microsoft.graph.downloadUrl don't need auth
-	if strings.Contains(url, "/thumbnails/") || strings.Contains(url, "/shares/") {
+	if urlguard.IsHost(u, "graph.microsoft.com") || strings.Contains(u.Path, "/thumbnails/") || strings.Contains(u.Path, "/shares/") {
 		downloadReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token.AccessToken))
 	}
 
 	downloadResp, err := s.httpClient.Do(downloadReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute download request: %w", err)
+		return nil, fmt.Errorf("failed to execute download request: %w", urlguard.RedactURL(err))
 	}
 
 	if downloadResp.StatusCode != http.StatusOK {
@@ -320,7 +331,7 @@ func (s *Service) getFolderInfoFromShareURL(shareURL string, token *models.Token
 	// Execute request
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute shares request: %w", err)
+		return nil, fmt.Errorf("failed to execute shares request: %w", urlguard.RedactURL(err))
 	}
 	defer resp.Body.Close()
 

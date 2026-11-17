@@ -1,5 +1,7 @@
 # Production stack. Only the frontend is public: its nginx serves the Angular app and proxies /api/* to the
 # backend, so everything runs on one origin. Backend and face-service are reachable only inside this network.
+# Resource limits are generous but keep AllMe from starving other apps on the shared server: face matching
+# gets up to 2 CPUs (two worker processes) and 3 GB; big searches take longer rather than using more.
 services:
   frontend:
     build:
@@ -12,6 +14,7 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+    cpus: 0.5
     mem_limit: 128m
     logging: &logging
       driver: "json-file"
@@ -39,7 +42,8 @@ services:
     depends_on:
       - face-service
     restart: unless-stopped
-    mem_limit: 512m
+    cpus: 1.0
+    mem_limit: 768m
     logging: *logging
 
   face-service:
@@ -48,6 +52,9 @@ services:
       dockerfile: Dockerfile
     expose:
       - "8081"
+    environment:
+      - FACE_WORKERS=2
     restart: unless-stopped
-    mem_limit: 2g
+    cpus: 2.0
+    mem_limit: 3g
     logging: *logging

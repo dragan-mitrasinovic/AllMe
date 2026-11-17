@@ -275,8 +275,25 @@ POST /downloads/zip                 # Stream selected files as a ZIP
 
 #### Thumbnails
 ```
-GET  /thumbnail                   # Proxied thumbnail (with auth)
+GET  /thumbnail                     # Proxied thumbnail (?url=&provider=)
 ```
+
+#### Outbound requests
+
+The backend only fetches `https` URLs on the selected provider's hosts (`internal/urlguard`): `www.googleapis.com` and `*.googleusercontent.com` for Google Drive; `graph.microsoft.com`, `*.microsoftpersonalcontent.com`, `*.1drv.com`, `*.livefilestore.com`, `*.sharepoint.com` and `*.svc.ms` for OneDrive. Redirects must stay on those hosts, connections to private, loopback and link-local addresses are refused, and the access token is only sent to the provider's API host. `/thumbnail` and `/downloads/zip` reject any other URL with `400` before fetching anything, and ZIP entries are flat, de-duplicated file names.
+
+#### Errors
+
+Error responses are `{"error": "<message>"}` with a fixed, user-facing message; the underlying error (provider API responses, face-service details, internal URLs) is only logged server-side (`internal/apierror`). After an OAuth login, the backend redirects to `/callback` with `success=true&provider=…` or with an `error` code only (`access_denied` or `auth_failed`), and the page shows its own text for it.
+
+#### Limits
+
+AllMe is meant for friends, so the limits are generous and mostly invisible; they keep one huge folder or a few searches at once from overloading the shared server:
+
+- **Pacing:** each search sends one batch of 100 photos to the face service at a time. The face service matches with a fixed pool of worker processes (`FACE_WORKERS`, default 2), shared by all searches, so big folders and concurrent searches take longer rather than using more memory or CPU.
+- **Abandoned searches** stop when nobody has checked their progress for 2 minutes (the page polls every 1.5 s).
+- **Caps:** 20,000 photos per search, subfolders followed 20 levels deep (deeper ones are skipped), 1,000 files per ZIP download.
+- **Containers** (`docker-compose.yml`): face service 2 CPUs / 3 GB, backend 1 CPU / 768 MB, frontend 0.5 CPU / 128 MB.
 
 ### Face Service API (Port 8081)
 

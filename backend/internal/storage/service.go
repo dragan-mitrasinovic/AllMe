@@ -2,6 +2,7 @@ package storage
 
 import (
 	"all-me-backend/pkg/models"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -59,29 +60,50 @@ func (s *Service) ListFolderContents(item *models.CloudItem, token *models.Token
 	}
 }
 
-// ListImages lists all image files in the specified folder
+// Generous limits for one search: far above a normal shared photo folder, they only stop runaway cases.
+const (
+	MaxImagesPerSearch = 20000
+	MaxFolderDepth     = 20
+)
+
+// ErrTooManyImages is returned when a folder (with its subfolders) holds more than MaxImagesPerSearch images.
+var ErrTooManyImages = errors.New("too many images in folder")
+
+// ListImages lists all image files in the specified folder. With recursive, subfolders are included down to
+// MaxFolderDepth levels; deeper folders are skipped. Listing stops with ErrTooManyImages once more than
+// MaxImagesPerSearch images are found.
 func (s *Service) ListImages(item *models.CloudItem, token *models.Token, recursive bool) ([]*models.CloudItem, error) {
-	allItems, err := s.ListFolderContents(item, token)
-	if err != nil {
+	images := make([]*models.CloudItem, 0)
+	if err := s.collectImages(item, token, recursive, 0, &images); err != nil {
 		return nil, err
 	}
+	return images, nil
+}
 
-	images := make([]*models.CloudItem, 0)
+func (s *Service) collectImages(item *models.CloudItem, token *models.Token, recursive bool, depth int, images *[]*models.CloudItem) error {
+	allItems, err := s.ListFolderContents(item, token)
+	if err != nil {
+		return err
+	}
+
 	for _, currentItem := range allItems {
-		if currentItem.IsFolder && recursive {
-			// Recursively get images from subfolder
-			subImages, err := s.ListImages(currentItem, token, recursive)
-			if err != nil {
+		if currentItem.IsFolder {
+			if !recursive || depth >= MaxFolderDepth {
 				continue
 			}
-
-			images = append(images, subImages...)
-		} else if !currentItem.IsFolder && IsImageMimeType(currentItem.MimeType) {
-			images = append(images, currentItem)
+			// A subfolder that can't be listed is skipped; hitting the image limit stops the whole listing
+			if err := s.collectImages(currentItem, token, recursive, depth+1, images); errors.Is(err, ErrTooManyImages) {
+				return err
+			}
+		} else if IsImageMimeType(currentItem.MimeType) {
+			if len(*images) >= MaxImagesPerSearch {
+				return ErrTooManyImages
+			}
+			*images = append(*images, currentItem)
 		}
 	}
 
-	return images, nil
+	return nil
 }
 
 // GetFileStream retrieves a file stream for downloading (full resolution)

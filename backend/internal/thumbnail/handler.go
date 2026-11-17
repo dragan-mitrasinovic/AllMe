@@ -1,7 +1,9 @@
 package thumbnail
 
 import (
+	"all-me-backend/internal/apierror"
 	"all-me-backend/internal/session"
+	"all-me-backend/internal/urlguard"
 	"all-me-backend/pkg/models"
 	"fmt"
 	"io"
@@ -45,12 +47,22 @@ func (h *Handler) handleThumbnailProxy(c echo.Context) error {
 		})
 	}
 
+	allowlist, err := urlguard.ForProvider(provider)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": fmt.Sprintf("unsupported provider: %s", provider),
+		})
+	}
+	if _, err := allowlist.Check(thumbnailURL); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "url is not a thumbnail URL of the selected provider",
+		})
+	}
+
 	// Get token from session
 	token, err := h.sessionStore.GetSessionToken(sessionID, provider)
 	if err != nil {
-		return c.JSON(http.StatusUnauthorized, map[string]string{
-			"error": fmt.Sprintf("Authentication failed: %v", err),
-		})
+		return apierror.NotSignedIn(c, err)
 	}
 
 	// Delegate to the appropriate provider service
@@ -67,9 +79,7 @@ func (h *Handler) handleThumbnailProxy(c echo.Context) error {
 	}
 
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": fmt.Sprintf("failed to fetch thumbnail: %v", err),
-		})
+		return apierror.Respond(c, http.StatusBadGateway, "Couldn't load the thumbnail.", err)
 	}
 	defer thumbnailStream.Close()
 

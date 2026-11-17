@@ -1,9 +1,9 @@
 package storage
 
 import (
+	"all-me-backend/internal/apierror"
 	"all-me-backend/internal/session"
 	"all-me-backend/pkg/models"
-	"fmt"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -46,23 +46,19 @@ func (h *Handler) GetFolderContents(c echo.Context) error {
 
 	token, err := h.sessionStore.GetSessionToken(sessionID, provider)
 	if err != nil {
-		return c.JSON(http.StatusUnauthorized, map[string]string{
-			"error": fmt.Sprintf("Authentication failed: %v", err),
-		})
+		return apierror.NotSignedIn(c, err)
 	}
 
 	folder, err := h.service.ParseShareLink(shareURL, token)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": fmt.Sprintf("Failed to parse share link: %v", err),
-		})
+		return apierror.Respond(c, http.StatusBadRequest,
+			"Couldn't open that folder link. Check that it's a shared folder link and that you can open it.", err)
 	}
 
 	contents, err := h.service.ListFolderContents(folder, token)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": fmt.Sprintf("Failed to list folder contents: %v", err),
-		})
+		return apierror.Respond(c, http.StatusBadGateway,
+			"Couldn't read the folder from your cloud storage. Please try again.", err)
 	}
 
 	return c.JSON(http.StatusOK, GetFolderContentsResponse{

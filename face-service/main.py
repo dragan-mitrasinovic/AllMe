@@ -1,19 +1,72 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 import logging
+import os
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures.process import BrokenProcessPool
 from typing import Dict, Optional, List
 import numpy as np
-import face_recognition
-import base64
-from io import BytesIO
-from PIL import Image
 import uuid
 from datetime import datetime, timedelta
 import asyncio
 import threading
 
+import face_match
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Face detection is CPU-bound, so it runs in a fixed pool of worker processes: concurrent searches share
+# these workers (and the container's CPU limit) instead of each starting its own threads.
+WORKERS = int(os.getenv("FACE_WORKERS", "2"))
+executor = ProcessPoolExecutor(max_workers=WORKERS)
+_executor_lock = threading.Lock()
+
+
+def replace_broken_executor(broken: ProcessPoolExecutor) -> None:
+    """A worker that dies (out of memory, a crash in dlib) breaks the whole pool for good; start a new one.
+    Only the first caller for a given broken pool replaces it."""
+    global executor
+    with _executor_lock:
+        if executor is broken:
+            logger.error("Face matching worker pool broke; starting a new one")
+            broken.shutdown(wait=False, cancel_futures=True)
+            executor = ProcessPoolExecutor(max_workers=WORKERS)
+
+
+class MatchingFailed(Exception):
+    pass
+
+
+def match_batch(job_id: str, images: List[str], base_encoding: np.ndarray) -> List["MatchResult"]:
+    """Matches every image, retrying the whole batch once on a fresh pool if the pool breaks (which can also
+    be caused by another search's image). Raises MatchingFailed rather than returning partial results."""
+    for attempt in (1, 2):
+        pool = executor
+        try:
+            matches = []
+            futures = {pool.submit(face_match.best_match_distance, image, base_encoding): idx
+                       for idx, image in enumerate(images)}
+            for processed, future in enumerate(as_completed(futures), start=1):
+                idx = futures[future]
+                try:
+                    distance = future.result()
+                    if distance is not None:
+                        matches.append(MatchResult(idx, distance))
+                except BrokenProcessPool:
+                    raise
+                except Exception as e:
+                    logger.warning(f"Failed to process image at index {idx} for job {job_id}: {e}")
+                job_store.update_progress(job_id, processed, len(matches))
+            matches.sort(key=lambda m: m.index)
+            return matches
+        except BrokenProcessPool:
+            replace_broken_executor(pool)
+            logger.warning(f"Worker pool broke during job {job_id} (attempt {attempt})")
+    raise MatchingFailed("Face matching failed, please try again")
+
+# Finished jobs are kept this long so the backend can read their results, then removed
+FINISHED_JOB_TTL = timedelta(hours=1)
 
 class SessionData:
     def __init__(self, encoding: np.ndarray):
@@ -94,6 +147,7 @@ class JobStore:
         self.jobs: Dict[str, JobStatus] = {}
     
     def create_job(self, total_images: int) -> str:
+        self.prune_finished()
         job_id = str(uuid.uuid4())
         self.jobs[job_id] = JobStatus(job_id, total_images)
         return job_id
@@ -125,6 +179,11 @@ class JobStore:
             job.error = error
             job.message = f"Failed: {error}"
     
+    def prune_finished(self) -> None:
+        cutoff = datetime.now() - FINISHED_JOB_TTL
+        for job_id in [j.job_id for j in list(self.jobs.values()) if j.status != "processing" and j.created_at < cutoff]:
+            self.jobs.pop(job_id, None)
+
     def delete_job(self, job_id: str) -> bool:
         if job_id in self.jobs:
             del self.jobs[job_id]
@@ -147,6 +206,7 @@ async def health_check():
         "service": "face-recognition",
         "version": "1.0.0",
         "active_sessions": len(session_store.sessions),
+        "workers": WORKERS,
         "timestamp": datetime.now().isoformat()
     }
 
@@ -188,39 +248,26 @@ class JobStatusResponse(BaseModel):
 async def register_face(request: RegisterRequest):
     """Register a base face for a session"""
     try:
-        # Decode base64 image
-        try:
-            image_data = base64.b64decode(request.image)
-        except Exception as e:
+        loop = asyncio.get_running_loop()
+        for attempt in (1, 2):
+            pool = executor
+            try:
+                result, face_encoding = await loop.run_in_executor(pool, face_match.encode_reference_face, request.image)
+                break
+            except BrokenProcessPool:
+                replace_broken_executor(pool)
+                if attempt == 2:
+                    raise HTTPException(status_code=503, detail="Face matching is restarting, please try again")
+
+        if result == "invalid_image":
             raise HTTPException(status_code=400, detail="Invalid image format")
-        
-        # Load image with PIL
-        try:
-            image = Image.open(BytesIO(image_data))
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
-            image_array = np.array(image)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail="Invalid image format")
-        
-        # Detect faces in the image
-        face_locations = face_recognition.face_locations(image_array)
-        
-        # Validate exactly one face is detected
-        if len(face_locations) == 0:
+        if result == "no_face":
             raise HTTPException(status_code=400, detail="No face detected in image")
-        
-        if len(face_locations) > 1:
+        if result == "multiple_faces":
             raise HTTPException(status_code=400, detail="Multiple faces detected, please use image with single face")
-        
-        # Extract face encoding
-        face_encodings = face_recognition.face_encodings(image_array, face_locations)
-        
-        if len(face_encodings) == 0:
+        if result != "ok":
             raise HTTPException(status_code=500, detail="Failed to extract face encoding")
-        
-        face_encoding = face_encodings[0]
-        
+
         session_store.store(request.session_id, face_encoding)
         return RegisterResponse(success=True)
         
@@ -238,44 +285,7 @@ def process_batch_background(job_id: str, session_id: str, images: List[str]):
             job_store.fail_job(job_id, "Session not found")
             return
         
-        matches = []
-        total_images = len(images)
-        
-        for idx, image_base64 in enumerate(images):
-            try:
-                image_data = base64.b64decode(image_base64)
-                image = Image.open(BytesIO(image_data))
-                if image.mode != 'RGB':
-                    image = image.convert('RGB')
-                image_array = np.array(image)
-                
-                face_locations = face_recognition.face_locations(image_array)
-                
-                if len(face_locations) > 0:
-                    face_encodings = face_recognition.face_encodings(image_array, face_locations)
-                    
-                    # Compare all faces in the image and keep the best match
-                    best_distance = float('inf')
-                    
-                    for face_encoding in face_encodings:
-                        # Calculate face distance
-                        distances = face_recognition.face_distance([base_encoding], face_encoding)
-                        distance = distances[0]
-                        
-                        # Use 0.7 as the maximum threshold and track the best matching distance
-                        if distance <= 0.7 and distance < best_distance:
-                            best_distance = distance
-                    
-                    # If any face matched, add the image with the best distance
-                    if best_distance <= 0.7:
-                        matches.append(MatchResult(idx, float(best_distance)))
-                
-                job_store.update_progress(job_id, idx + 1, len(matches))
-                        
-            except Exception as e:
-                logger.warning(f"Failed to process image at index {idx} for job {job_id}: {e}")
-                continue
-        
+        matches = match_batch(job_id, images, base_encoding)
         job_store.complete_job(job_id, matches)
         
     except Exception as e:

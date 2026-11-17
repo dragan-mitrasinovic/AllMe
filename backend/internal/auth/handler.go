@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"all-me-backend/internal/apierror"
 	"all-me-backend/internal/session"
 	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/labstack/echo/v4"
@@ -62,11 +64,14 @@ func (h *Handler) handleLogin(c echo.Context) error {
 		session.SetContext(c, sessionID)
 	}
 
+	if !h.authService.validateProvider(provider) {
+		return apierror.Respond(c, http.StatusBadRequest, "Unsupported cloud storage provider.", nil)
+	}
+
 	authURL, err := h.authService.InitiateOAuth(provider, sessionID)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": err.Error(),
-		})
+		return apierror.Respond(c, http.StatusInternalServerError,
+			"Signing in isn't available right now. Please try again later.", err)
 	}
 
 	return c.Redirect(http.StatusTemporaryRedirect, authURL)
@@ -80,34 +85,33 @@ func (h *Handler) handleCallback(c echo.Context) error {
 	state := c.QueryParam("state")
 	errorParam := c.QueryParam("error")
 
-	// Handle OAuth errors - redirect to frontend with error
+	// The provider reported an error (e.g. the user cancelled): pass on only a known code
 	if errorParam != "" {
-		errorDescription := c.QueryParam("error_description")
-		return c.Redirect(http.StatusTemporaryRedirect,
-			h.frontendURL+"/callback?error="+errorParam+"&error_description="+errorDescription)
+		c.Logger().Warnf("OAuth error from %s: %s: %s", provider, errorParam, c.QueryParam("error_description"))
+		if errorParam != "access_denied" {
+			errorParam = "auth_failed"
+		}
+		return h.redirectToCallback(c, url.Values{"error": {errorParam}})
 	}
 
-	if code == "" {
-		return c.Redirect(http.StatusTemporaryRedirect,
-			h.frontendURL+"/callback?error=missing_code")
-	}
-
-	if state == "" {
-		return c.Redirect(http.StatusTemporaryRedirect,
-			h.frontendURL+"/callback?error=missing_state")
+	if code == "" || state == "" {
+		return h.redirectToCallback(c, url.Values{"error": {"auth_failed"}})
 	}
 
 	token, newSessionID, err := h.authService.HandleCallback(provider, code, state, session.FromContext(c))
 	if err != nil {
-		return c.Redirect(http.StatusTemporaryRedirect,
-			h.frontendURL+"/callback?error=auth_failed&message="+err.Error())
+		c.Logger().Errorf("OAuth callback for %s failed: %v", provider, err)
+		return h.redirectToCallback(c, url.Values{"error": {"auth_failed"}})
 	}
 
 	session.SetCookie(c, newSessionID)
 
-	// Redirect to frontend callback with success
-	return c.Redirect(http.StatusTemporaryRedirect,
-		h.frontendURL+"/callback?success=true&provider="+token.Provider)
+	return h.redirectToCallback(c, url.Values{"success": {"true"}, "provider": {token.Provider}})
+}
+
+// redirectToCallback sends the browser to the frontend's /callback page with properly encoded parameters.
+func (h *Handler) redirectToCallback(c echo.Context, params url.Values) error {
+	return c.Redirect(http.StatusTemporaryRedirect, h.frontendURL+"/callback?"+params.Encode())
 }
 
 // handleValidateSession checks if the session is valid and has a token for the specified provider
@@ -152,9 +156,7 @@ func (h *Handler) handleSignOut(c echo.Context) error {
 	if sessionID := session.FromContext(c); sessionID != "" {
 		ended, err := h.authService.SignOutProvider(sessionID, provider)
 		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{
-				"error": err.Error(),
-			})
+			return apierror.Respond(c, http.StatusBadRequest, "Unsupported cloud storage provider.", err)
 		}
 		sessionEnded = ended
 	}

@@ -2,6 +2,7 @@ package face
 
 import (
 	"all-me-backend/internal/session"
+	"all-me-backend/internal/storage"
 	"all-me-backend/pkg/models"
 	"bytes"
 	"context"
@@ -11,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -77,15 +79,17 @@ func (s *Service) CompareFolderImages(sessionID string, folderLink string, token
 	}
 
 	allImages, err := s.storageService.ListImages(folderItem, token, recursive)
+	if errors.Is(err, storage.ErrTooManyImages) {
+		return "", ErrTooManyImages
+	}
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrFolderAccess, err)
 	}
 
 	if len(allImages) == 0 {
-		return "", fmt.Errorf("%w: no images found in folder", ErrFolderAccess)
+		return "", ErrNoImages
 	}
 
-	// Process images in batches of 100
 	jobID, err := s.processFolderInBatches(sessionID, allImages, token)
 	if err != nil {
 		return "", err
@@ -101,6 +105,7 @@ func (s *Service) GetJobStatus(jobID, sessionID string) (*JobStatusResponse, err
 	if !exists || sessionID == "" || subtle.ConstantTimeCompare([]byte(ctx.ownerSessionID), []byte(sessionID)) != 1 {
 		return nil, ErrJobNotFound
 	}
+	s.jobManager.Touch(jobID)
 
 	// Return status from our job manager
 	response := &JobStatusResponse{
@@ -123,7 +128,7 @@ func (s *Service) GetJobStatus(jobID, sessionID string) (*JobStatusResponse, err
 	} else if ctx.status == "completed" {
 		response.Message = fmt.Sprintf("Completed! Found %d matches", ctx.matchesFound)
 	} else if ctx.status == "failed" {
-		response.Message = fmt.Sprintf("Failed: %s", ctx.errorMessage)
+		response.Message = ctx.errorMessage
 	}
 
 	// Map matches to cloud items if completed
@@ -245,7 +250,7 @@ func (s *Service) downloadAndEncodeImage(item *models.CloudItem, token *models.T
 	return base64.StdEncoding.EncodeToString(imageData), nil
 }
 
-// processFolderInBatches processes images in batches of 100 and creates a unified job
+// processFolderInBatches creates a job for the client and processes its images in the background
 func (s *Service) processFolderInBatches(sessionID string, allImages []*models.CloudItem, token *models.Token) (string, error) {
 	// Create a unified job ID for the client
 	jobID, err := session.NewID()
@@ -263,44 +268,111 @@ func (s *Service) processFolderInBatches(sessionID string, allImages []*models.C
 	return unifiedJobID, nil
 }
 
-// processBatchesBackground downloads and processes all image batches
-func (s *Service) processBatchesBackground(unifiedJobID, sessionID string, allImages []*models.CloudItem, token *models.Token) {
-	const batchSize = 100
+const (
+	batchSize = 100
+	// A single batch of batchSize images; the face-service may be busy with other searches' batches too.
+	batchTimeout = 30 * time.Minute
+	// The browser polls the job status every 1.5 s; a job nobody has polled for this long was abandoned.
+	abandonAfter = 2 * time.Minute
+)
+
+var errJobAbandoned = errors.New("job abandoned")
+
+// processBatchesBackground downloads and compares the images one batch at a time: the next batch is only
+// downloaded and sent once the face-service has finished the previous one. Memory per search stays at about
+// one batch, and concurrent searches share the face-service's workers. A job nobody polls any more stops.
+func (s *Service) processBatchesBackground(jobID, sessionID string, allImages []*models.CloudItem, token *models.Token) {
 	totalImages := len(allImages)
+	var allMatches []pythonMatchResult
 
-	// Split images into batches and send each to Python service
-	var pythonJobIDs []string
-	var batchOffsets []int // Track the starting index of each batch
-
-	for i := 0; i < totalImages; i += batchSize {
-		end := i + batchSize
-		if end > totalImages {
-			end = totalImages
-		}
-
-		batch := allImages[i:end]
-
-		// Download and encode this batch
-		encodedImages, err := s.downloadAndEncodeBatch(batch, token)
-		if err != nil {
-			// Mark job as failed
-			s.jobManager.MarkFailed(unifiedJobID, fmt.Sprintf("Failed to download batch: %v", err))
+	for offset := 0; offset < totalImages; offset += batchSize {
+		if s.jobManager.IsAbandoned(jobID, abandonAfter) {
+			s.jobManager.Delete(jobID)
 			return
 		}
 
-		// Send batch to Python service
+		end := min(offset+batchSize, totalImages)
+		encodedImages, err := s.downloadAndEncodeBatch(allImages[offset:end], token)
+		if err != nil {
+			s.failJob(jobID, "Couldn't download some photos from your cloud storage. Please try again.", err)
+			return
+		}
+
 		pythonJobID, err := s.startPythonCompareBatch(sessionID, encodedImages)
 		if err != nil {
-			s.jobManager.MarkFailed(unifiedJobID, fmt.Sprintf("Failed to start Python job: %v", err))
+			s.failJob(jobID, jobFailureMessage(err, "Face matching isn't available right now. Please try again in a moment."), err)
 			return
 		}
 
-		pythonJobIDs = append(pythonJobIDs, pythonJobID)
-		batchOffsets = append(batchOffsets, i)
+		matches, err := s.waitForPythonBatch(jobID, pythonJobID, offset, totalImages, len(allMatches))
+		if errors.Is(err, errJobAbandoned) {
+			s.jobManager.Delete(jobID)
+			return
+		}
+		if err != nil {
+			s.failJob(jobID, jobFailureMessage(err, "Face matching failed. Please try again."), err)
+			return
+		}
+		allMatches = append(allMatches, matches...)
 	}
 
-	// Poll all Python jobs and aggregate results
-	s.aggregateBatchResults(unifiedJobID, pythonJobIDs, batchOffsets, totalImages)
+	s.jobManager.MarkCompleted(jobID, allMatches)
+}
+
+// jobFailureMessage picks the message for a failed job: when the face-service no longer has the reference
+// photo (it expired or the service restarted), retrying can't help, so the user is asked to upload it again.
+func jobFailureMessage(err error, fallback string) string {
+	if errors.Is(err, ErrSessionNotFound) || errors.Is(err, ErrNoBaseFace) {
+		return msgUploadPhotoAgain
+	}
+	return fallback
+}
+
+// failJob marks the job failed with a user-facing message and logs the underlying error.
+func (s *Service) failJob(jobID, public string, err error) {
+	log.Printf("face job %s failed: %v", jobID, err)
+	s.jobManager.MarkFailed(jobID, public)
+}
+
+// waitForPythonBatch polls one face-service batch until it finishes, reporting overall progress, and returns
+// its matches with indices shifted to positions in the whole job.
+func (s *Service) waitForPythonBatch(jobID, pythonJobID string, offset, totalImages, matchesSoFar int) ([]pythonMatchResult, error) {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	timeout := time.After(batchTimeout)
+
+	for {
+		select {
+		case <-timeout:
+			return nil, errors.New("Processing timeout")
+		case <-ticker.C:
+		}
+
+		var status pythonJobStatusResponse
+		if err := s.callPythonServiceGet(fmt.Sprintf("/face/job-status/%s", pythonJobID), &status); err != nil {
+			return nil, fmt.Errorf("Failed to get job status: %v", err)
+		}
+
+		switch status.Status {
+		case "failed", "error":
+			if status.Error == "Session not found" {
+				return nil, fmt.Errorf("%w: face-service job %s", ErrSessionNotFound, pythonJobID)
+			}
+			return nil, fmt.Errorf("face-service job %s failed: %s", pythonJobID, status.Error)
+		case "completed":
+			matches := make([]pythonMatchResult, 0, len(status.Matches))
+			for _, match := range status.Matches {
+				matches = append(matches, pythonMatchResult{Index: match.Index + offset, Distance: match.Distance})
+			}
+			s.jobManager.UpdateProgress(jobID, offset+status.TotalImages, totalImages, matchesSoFar+len(matches))
+			return matches, nil
+		}
+
+		s.jobManager.UpdateProgress(jobID, offset+status.CurrentImage, totalImages, matchesSoFar+status.MatchesFound)
+		if s.jobManager.IsAbandoned(jobID, abandonAfter) {
+			return nil, errJobAbandoned
+		}
+	}
 }
 
 // startPythonCompareBatch sends a batch of images to Python service for async comparison
@@ -316,89 +388,6 @@ func (s *Service) startPythonCompareBatch(sessionID string, encodedImages []stri
 	}
 
 	return result.JobID, nil
-}
-
-// aggregateBatchResults polls Python jobs and combines their results
-func (s *Service) aggregateBatchResults(unifiedJobID string, pythonJobIDs []string, batchOffsets []int, totalImages int) {
-	// Track completion of all Python jobs
-	completedJobs := make(map[string]*pythonJobStatusResponse)
-
-	// Poll until all jobs complete or one fails
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-
-	timeout := time.After(60 * time.Minute)
-
-	for {
-		select {
-		case <-timeout:
-			s.jobManager.MarkFailed(unifiedJobID, "Processing timeout")
-			return
-		case <-ticker.C:
-			allComplete := true
-			var totalProcessed int
-			var totalMatches int
-			var failedJob string
-
-			// Check status of each Python job
-			for _, pythonJobID := range pythonJobIDs {
-				if _, exists := completedJobs[pythonJobID]; exists {
-					continue
-				}
-
-				var status pythonJobStatusResponse
-				url := fmt.Sprintf("/face/job-status/%s", pythonJobID)
-				if err := s.callPythonServiceGet(url, &status); err != nil {
-					s.jobManager.MarkFailed(unifiedJobID, fmt.Sprintf("Failed to get job status: %v", err))
-					return
-				}
-
-				if status.Status == "failed" || status.Status == "error" {
-					failedJob = status.Error
-					break
-				}
-
-				if status.Status == "completed" {
-					completedJobs[pythonJobID] = &status
-				} else {
-					allComplete = false
-				}
-
-				// Update progress - add current batch progress
-				totalProcessed += status.CurrentImage
-				totalMatches += status.MatchesFound
-			}
-
-			// Update unified job progress
-			s.jobManager.UpdateProgress(unifiedJobID, totalProcessed, totalImages, totalMatches)
-
-			if failedJob != "" {
-				s.jobManager.MarkFailed(unifiedJobID, failedJob)
-				return
-			}
-
-			if allComplete {
-				// Aggregate all matches with adjusted indices
-				var allMatches []pythonMatchResult
-				for idx, pythonJobID := range pythonJobIDs {
-					jobResult := completedJobs[pythonJobID]
-					offset := batchOffsets[idx]
-
-					// Adjust match indices to global positions
-					for _, match := range jobResult.Matches {
-						adjustedMatch := pythonMatchResult{
-							Index:    match.Index + offset,
-							Distance: match.Distance,
-						}
-						allMatches = append(allMatches, adjustedMatch)
-					}
-				}
-
-				s.jobManager.MarkCompleted(unifiedJobID, allMatches)
-				return
-			}
-		}
-	}
 }
 
 // callPythonServicePost is a generic helper for making HTTP POST calls to the Python service

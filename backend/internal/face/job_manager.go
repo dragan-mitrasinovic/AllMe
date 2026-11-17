@@ -8,6 +8,7 @@ import (
 
 type jobContext struct {
 	ownerSessionID string
+	lastPolled     time.Time
 	allImages      []*models.CloudItem
 	token          *models.Token
 	createdAt      time.Time
@@ -59,6 +60,7 @@ func (jm *JobManager) Store(jobID, ownerSessionID string, allImages []*models.Cl
 
 	jm.contexts[jobID] = &jobContext{
 		ownerSessionID: ownerSessionID,
+		lastPolled:     time.Now(),
 		allImages:      allImages,
 		token:          token,
 		createdAt:      time.Now(),
@@ -115,4 +117,23 @@ func (jm *JobManager) Delete(jobID string) {
 	defer jm.mu.Unlock()
 
 	delete(jm.contexts, jobID)
+}
+
+// Touch records that the client polled the job.
+func (jm *JobManager) Touch(jobID string) {
+	jm.mu.Lock()
+	defer jm.mu.Unlock()
+
+	if ctx, exists := jm.contexts[jobID]; exists {
+		ctx.lastPolled = time.Now()
+	}
+}
+
+// IsAbandoned reports whether nobody has polled the job for maxIdle, or the job no longer exists.
+func (jm *JobManager) IsAbandoned(jobID string, maxIdle time.Duration) bool {
+	jm.mu.RLock()
+	defer jm.mu.RUnlock()
+
+	ctx, exists := jm.contexts[jobID]
+	return !exists || time.Since(ctx.lastPolled) > maxIdle
 }

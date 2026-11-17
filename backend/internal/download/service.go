@@ -5,6 +5,8 @@ import (
 	"archive/zip"
 	"fmt"
 	"io"
+	"path"
+	"strings"
 )
 
 type Service struct {
@@ -23,8 +25,9 @@ func (s *Service) StreamZipArchive(writer io.Writer, files []*models.CloudItem, 
 	zipWriter := zip.NewWriter(writer)
 	defer zipWriter.Close()
 
+	usedNames := make(map[string]bool)
 	for _, file := range files {
-		if err := s.addFileToZip(zipWriter, file, token); err != nil {
+		if err := s.addFileToZip(zipWriter, file, safeZipName(file.Name, usedNames), token); err != nil {
 			// Continue with other files even if one fails
 			continue
 		}
@@ -34,7 +37,7 @@ func (s *Service) StreamZipArchive(writer io.Writer, files []*models.CloudItem, 
 }
 
 // addFileToZip downloads a file from cloud storage and adds it to the ZIP archive
-func (s *Service) addFileToZip(zipWriter *zip.Writer, file *models.CloudItem, token *models.Token) error {
+func (s *Service) addFileToZip(zipWriter *zip.Writer, file *models.CloudItem, entryName string, token *models.Token) error {
 	// Get file stream from cloud storage
 	fileStream, err := s.storageService.GetFileStream(file, token)
 	if err != nil {
@@ -43,7 +46,7 @@ func (s *Service) addFileToZip(zipWriter *zip.Writer, file *models.CloudItem, to
 	defer fileStream.Close()
 
 	// Create a new file entry in the ZIP archive
-	zipFile, err := zipWriter.Create(file.Name)
+	zipFile, err := zipWriter.Create(entryName)
 	if err != nil {
 		return fmt.Errorf("failed to create ZIP entry: %w", err)
 	}
@@ -55,4 +58,23 @@ func (s *Service) addFileToZip(zipWriter *zip.Writer, file *models.CloudItem, to
 	}
 
 	return nil
+}
+
+// safeZipName turns a file name from the request into a flat ZIP entry name: no directories, so nothing
+// can be extracted outside the target folder, and duplicates get a " (n)" suffix instead of overwriting.
+func safeZipName(name string, used map[string]bool) string {
+	base := path.Base(strings.ReplaceAll(name, "\\", "/"))
+	base = strings.TrimSpace(base)
+	if base == "" || base == "." || base == ".." || base == "/" {
+		base = "photo"
+	}
+
+	candidate := base
+	ext := path.Ext(base)
+	stem := strings.TrimSuffix(base, ext)
+	for i := 2; used[strings.ToLower(candidate)]; i++ {
+		candidate = fmt.Sprintf("%s (%d)%s", stem, i, ext)
+	}
+	used[strings.ToLower(candidate)] = true
+	return candidate
 }

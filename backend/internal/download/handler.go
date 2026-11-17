@@ -1,7 +1,9 @@
 package download
 
 import (
+	"all-me-backend/internal/apierror"
 	"all-me-backend/internal/session"
+	"all-me-backend/internal/urlguard"
 	"all-me-backend/pkg/models"
 	"fmt"
 	"net/http"
@@ -9,6 +11,9 @@ import (
 
 	"github.com/labstack/echo/v4"
 )
+
+// MaxFilesPerZip is a generous cap on one ZIP download; it only stops runaway requests.
+const MaxFilesPerZip = 1000
 
 type Handler struct {
 	service      *Service
@@ -42,17 +47,41 @@ func (h *Handler) DownloadZip(c echo.Context) error {
 		})
 	}
 
+	if len(req.Files) > MaxFilesPerZip {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": fmt.Sprintf("You can download up to %d photos at once. Please select fewer.", MaxFilesPerZip),
+		})
+	}
+
 	if req.Provider == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{
 			"error": "Provider is required",
 		})
 	}
 
+	allowlist, err := urlguard.ForProvider(req.Provider)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Unsupported provider",
+		})
+	}
+	// File URLs come from the browser: check them all before anything is fetched or streamed
+	for _, file := range req.Files {
+		if file == nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "Invalid file entry",
+			})
+		}
+		if _, err := allowlist.Check(file.DownloadURL); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "File URL is not a download URL of the selected provider",
+			})
+		}
+	}
+
 	token, err := h.sessionStore.GetSessionToken(session.FromContext(c), req.Provider)
 	if err != nil {
-		return c.JSON(http.StatusUnauthorized, map[string]string{
-			"error": fmt.Sprintf("Authentication failed: %v", err),
-		})
+		return apierror.NotSignedIn(c, err)
 	}
 
 	// Set appropriate headers for ZIP download

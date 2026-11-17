@@ -1,10 +1,10 @@
 package face
 
 import (
+	"all-me-backend/internal/apierror"
 	"all-me-backend/internal/session"
 	"all-me-backend/pkg/models"
 	"errors"
-	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -88,9 +88,7 @@ func (h *Handler) CompareFolder(c echo.Context) error {
 
 	token, err := h.sessionStore.GetSessionToken(session.FromContext(c), req.Provider)
 	if err != nil {
-		return c.JSON(http.StatusUnauthorized, echo.Map{
-			"error": fmt.Sprintf("Authentication failed: %v", err),
-		})
+		return apierror.NotSignedIn(c, err)
 	}
 
 	jobID, err := h.service.CompareFolderImages(session.FromContext(c), req.FolderLink, token, req.Recursive)
@@ -176,7 +174,5 @@ func validateImageFile(file *multipart.FileHeader) error {
 
 func handleServiceError(c echo.Context, err error) error {
 	errResp := GetErrorResponse(err)
-	return c.JSON(errResp.StatusCode, echo.Map{
-		"error": errResp.Message,
-	})
+	return apierror.Respond(c, errResp.StatusCode, errResp.Message, err)
 }
