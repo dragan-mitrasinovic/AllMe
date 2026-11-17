@@ -9,71 +9,36 @@ export interface SessionValidationResponse {
   provider?: string;
 }
 
+// The session lives in an HttpOnly cookie issued by the backend at login; the browser sends it with every
+// /api request, so the app never sees or handles a session ID itself.
 @Injectable({
   providedIn: 'root'
 })
 export class AuthService {
   private readonly apiUrl = environment.apiUrl;
-  private sessionId: string | null = null;
 
-  constructor(private http: HttpClient) {
-    this.sessionId = sessionStorage.getItem('sessionId');
-  }
+  constructor(private http: HttpClient) {}
 
   initiateOAuth(provider: string): string {
-    const sessionId = this.getOrCreateSessionId();
-    return `${this.apiUrl}/auth/${provider}/login?session_id=${sessionId}`;
+    return `${this.apiUrl}/auth/${provider}/login`;
   }
 
   validateSession(provider: string): Observable<SessionValidationResponse> {
-    const sessionId = this.getOrCreateSessionId();
-    const params = new HttpParams()
-      .set('session_id', sessionId)
-      .set('provider', provider);
-    
+    const params = new HttpParams().set('provider', provider);
     return this.http.get<SessionValidationResponse>(`${this.apiUrl}/auth/validate-session`, { params });
   }
 
-  getSessionId(): string | null {
-    return this.sessionId;
-  }
-
-  getOrCreateSessionId(): string {
-    if (!this.sessionId) {
-      this.sessionId = this.generateSessionId();
-      sessionStorage.setItem('sessionId', this.sessionId);
-    }
-    return this.sessionId;
-  }
-
-  private generateSessionId(): string {
-    return 'session_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
-  }
-
   clearSession(): void {
-    this.sessionId = null;
     sessionStorage.clear();
   }
 
   clearFolderContext(): void {
-    // Clear only folder-related session storage, keep sessionId and tokens
     sessionStorage.removeItem('folderLink');
     sessionStorage.removeItem('provider');
   }
 
   signOutProvider(provider: string): Observable<any> {
-    const sessionId = this.getSessionId();
-    if (!sessionId) {
-      return new Observable(observer => {
-        observer.next({ success: true });
-        observer.complete();
-      });
-    }
-
-    const params = new HttpParams()
-      .set('session_id', sessionId)
-      .set('provider', provider);
-    
+    const params = new HttpParams().set('provider', provider);
     return this.http.post(`${this.apiUrl}/auth/signout`, null, { params });
   }
 }

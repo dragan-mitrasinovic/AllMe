@@ -10,7 +10,6 @@ export interface FaceRegisterResponse {
 }
 
 export interface CompareFolderRequest {
-  session_id: string;
   folder_link: string;
   provider: string;
   recursive?: boolean;

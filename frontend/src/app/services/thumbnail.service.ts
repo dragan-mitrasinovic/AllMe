@@ -1,5 +1,4 @@
 import { Injectable } from '@angular/core';
-import { AuthService } from './auth.service';
 import { environment } from '../../environments/environment';
 
 @Injectable({
@@ -7,8 +6,6 @@ import { environment } from '../../environments/environment';
 })
 export class ThumbnailService {
   private readonly apiUrl = environment.apiUrl;
-
-  constructor(private authService: AuthService) {}
 
   getProxiedThumbnailUrl(originalUrl: string, provider: string): string {
     if (!originalUrl || !provider) {
@@ -29,13 +26,8 @@ export class ThumbnailService {
       return originalUrl;
     }
 
-    const sessionId = this.authService.getSessionId();
-    if (!sessionId) {
-      return originalUrl; // Fallback to original URL if no session
-    }
-
-    // Create proxied URL with provider parameter
+    // The session cookie authenticates the proxied request
     const encodedUrl = encodeURIComponent(originalUrl);
-    return `${this.apiUrl}/thumbnail?session_id=${sessionId}&url=${encodedUrl}&provider=${provider}`;
+    return `${this.apiUrl}/thumbnail?url=${encodedUrl}&provider=${provider}`;
   }
 }

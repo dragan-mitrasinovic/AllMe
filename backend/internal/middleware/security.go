@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net/http"
 	"os"
 	"strings"
 
@@ -73,6 +74,31 @@ func SecurityHeaders() echo.MiddlewareFunc {
 				c.Response().Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
 			}
 
+			return next(c)
+		}
+	}
+}
+
+// SameOriginWrites rejects state-changing requests (anything but GET/HEAD/OPTIONS) whose Origin header
+// is not the frontend's origin. Together with the SameSite=Lax session cookie this blocks cross-site
+// request forgery. Requests without an Origin header (non-browser clients) carry no session cookie
+// from a victim's browser, so they are allowed through. Without FRONTEND_URL the check is off.
+func SameOriginWrites() echo.MiddlewareFunc {
+	allowed := strings.TrimRight(os.Getenv("FRONTEND_URL"), "/")
+
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			switch c.Request().Method {
+			case http.MethodGet, http.MethodHead, http.MethodOptions:
+				return next(c)
+			}
+
+			origin := c.Request().Header.Get(echo.HeaderOrigin)
+			if allowed != "" && origin != "" && origin != allowed {
+				return c.JSON(http.StatusForbidden, map[string]string{
+					"error": "cross-origin request rejected",
+				})
+			}
 			return next(c)
 		}
 	}

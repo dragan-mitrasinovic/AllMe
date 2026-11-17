@@ -1,6 +1,7 @@
 package face
 
 import (
+	"all-me-backend/internal/session"
 	"all-me-backend/pkg/models"
 	"errors"
 	"fmt"
@@ -27,26 +28,13 @@ func NewHandler(service *Service, sessionStore models.SessionStore) *Handler {
 func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	face := e.Group("/face")
 
-	face.POST("/register-base", h.RegisterBaseFace)
-	face.POST("/compare-folder", h.CompareFolder)
-	face.GET("/job-status/:jobId", h.GetJobStatus)
-	face.DELETE("/clear-reference/:sessionId", h.ClearReferenceImage)
+	face.POST("/register-base", h.RegisterBaseFace, session.Required)
+	face.POST("/compare-folder", h.CompareFolder, session.Required)
+	face.GET("/job-status/:jobId", h.GetJobStatus, session.Required)
+	face.DELETE("/reference", h.ClearReferenceImage)
 }
 
 func (h *Handler) RegisterBaseFace(c echo.Context) error {
-	var req RegisterBaseFaceRequest
-	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, echo.Map{
-			"error": "Invalid request format",
-		})
-	}
-
-	if err := validateRegisterRequest(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, echo.Map{
-			"error": err.Error(),
-		})
-	}
-
 	file, err := c.FormFile("image")
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{
@@ -75,7 +63,7 @@ func (h *Handler) RegisterBaseFace(c echo.Context) error {
 		})
 	}
 
-	if err := h.service.RegisterBaseFace(req.SessionID, imageData); err != nil {
+	if err := h.service.RegisterBaseFace(session.FromContext(c), imageData); err != nil {
 		return handleServiceError(c, err)
 	}
 
@@ -98,14 +86,14 @@ func (h *Handler) CompareFolder(c echo.Context) error {
 		})
 	}
 
-	token, err := h.sessionStore.GetSessionToken(req.SessionID, req.Provider)
+	token, err := h.sessionStore.GetSessionToken(session.FromContext(c), req.Provider)
 	if err != nil {
 		return c.JSON(http.StatusUnauthorized, echo.Map{
 			"error": fmt.Sprintf("Authentication failed: %v", err),
 		})
 	}
 
-	jobID, err := h.service.CompareFolderImages(req.SessionID, req.FolderLink, token, req.Recursive)
+	jobID, err := h.service.CompareFolderImages(session.FromContext(c), req.FolderLink, token, req.Recursive)
 	if err != nil {
 		return handleServiceError(c, err)
 	}
@@ -125,7 +113,7 @@ func (h *Handler) GetJobStatus(c echo.Context) error {
 		})
 	}
 
-	status, err := h.service.GetJobStatus(jobID)
+	status, err := h.service.GetJobStatus(jobID, session.FromContext(c))
 	if err != nil {
 		return handleServiceError(c, err)
 	}
@@ -134,16 +122,11 @@ func (h *Handler) GetJobStatus(c echo.Context) error {
 }
 
 func (h *Handler) ClearReferenceImage(c echo.Context) error {
-	sessionID := c.Param("sessionId")
-
-	if strings.TrimSpace(sessionID) == "" {
-		return c.JSON(http.StatusBadRequest, echo.Map{
-			"error": "session_id is required",
-		})
-	}
-
-	if err := h.service.ClearReferenceImage(sessionID); err != nil {
-		return handleServiceError(c, err)
+	// Without a session there is no reference image to clear.
+	if sessionID := session.FromContext(c); sessionID != "" {
+		if err := h.service.ClearReferenceImage(sessionID); err != nil {
+			return handleServiceError(c, err)
+		}
 	}
 
 	return c.JSON(http.StatusOK, echo.Map{
@@ -152,18 +135,7 @@ func (h *Handler) ClearReferenceImage(c echo.Context) error {
 	})
 }
 
-func validateRegisterRequest(req *RegisterBaseFaceRequest) error {
-	if strings.TrimSpace(req.SessionID) == "" {
-		return errors.New("session_id is required")
-	}
-	return nil
-}
-
 func validateCompareFolderRequest(req *CompareFolderRequest) error {
-	if strings.TrimSpace(req.SessionID) == "" {
-		return errors.New("session_id is required")
-	}
-
 	if strings.TrimSpace(req.FolderLink) == "" {
 		return errors.New("folder_link is required")
 	}

@@ -64,9 +64,20 @@ func TestAuthService_HandleCallback_Success(t *testing.T) {
 	}
 
 	// Test callback handling
-	token, err := service.HandleCallback("onedrive", "test-code", state.State)
+	token, newSessionID, err := service.HandleCallback("onedrive", "test-code", state.State, "test-session")
 	if err != nil {
 		t.Fatalf("HandleCallback failed: %v", err)
+	}
+
+	// The session moves to a new ID; the pre-login ID is no longer valid
+	if newSessionID == "" || newSessionID == "test-session" {
+		t.Errorf("Expected a new session ID, got %q", newSessionID)
+	}
+	if service.ResolveSession("test-session") {
+		t.Error("Expected the pre-login session ID to be invalid after login")
+	}
+	if stored, err := service.GetSessionToken(newSessionID, "onedrive"); err != nil || stored.AccessToken != "mock-access-token" {
+		t.Errorf("Expected token stored under the new session ID, got %v, %v", stored, err)
 	}
 
 	// Verify token properties
@@ -82,7 +93,7 @@ func TestAuthService_HandleCallback_Success(t *testing.T) {
 func TestAuthService_HandleCallback_InvalidState(t *testing.T) {
 	service := createTestService("")
 
-	_, err := service.HandleCallback("onedrive", "test-code", "invalid-state")
+	_, _, err := service.HandleCallback("onedrive", "test-code", "invalid-state", "test-session")
 	if err == nil {
 		t.Error("Expected error for invalid state, got nil")
 	}
@@ -114,7 +125,7 @@ func TestAuthService_HandleCallback_ExpiredState(t *testing.T) {
 	state.ExpiresAt = time.Now().Add(-1 * time.Hour)
 	service.store.states[state.State] = state
 
-	_, err = service.HandleCallback("onedrive", "test-code", state.State)
+	_, _, err = service.HandleCallback("onedrive", "test-code", state.State, "test-session")
 	if err == nil {
 		t.Error("Expected error for expired state, got nil")
 	}
@@ -140,7 +151,7 @@ func TestAuthService_InitiateOAuth_UnsupportedProvider(t *testing.T) {
 func TestAuthService_HandleCallback_UnsupportedProvider(t *testing.T) {
 	service := createTestService("")
 
-	_, err := service.HandleCallback("unsupported", "test-code", "test-state")
+	_, _, err := service.HandleCallback("unsupported", "test-code", "test-state", "test-session")
 	if err == nil {
 		t.Error("Expected error for unsupported provider, got nil")
 	}
@@ -169,7 +180,7 @@ func TestAuthService_HandleCallback_ProviderMismatch(t *testing.T) {
 	}
 
 	// Try to use the state with a different provider
-	_, err = service.HandleCallback("googledrive", "test-code", state.State)
+	_, _, err = service.HandleCallback("googledrive", "test-code", state.State, "test-session")
 	if err == nil {
 		t.Error("Expected error for provider mismatch, got nil")
 	}
@@ -200,4 +211,31 @@ func (m *mockAuthProvider) GetOAuthConfig() *models.OAuthConfig {
 func (m *mockAuthProvider) BuildAuthURL(state string) (string, error) {
 	config := m.GetOAuthConfig()
 	return config.AuthURL + "?client_id=" + config.ClientID + "&state=" + state, nil
+}
+
+// Token reads (every data request) run concurrently with logins and sign-outs that modify the token map;
+// an unlocked read would make the Go runtime abort with "concurrent map read and map write".
+func TestSessionTokens_ConcurrentReadAndWrite(t *testing.T) {
+	service := createTestService("")
+	sessionID, err := service.CreateSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	userSession, _ := service.store.GetSession(sessionID)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 20000; i++ {
+			service.store.mutex.Lock()
+			userSession.SetToken("onedrive", &models.Token{AccessToken: "t", Provider: "onedrive"})
+			userSession.SetToken("googledrive", &models.Token{AccessToken: "t", Provider: "googledrive"})
+			service.store.mutex.Unlock()
+			_, _ = service.SignOutProvider(sessionID, "googledrive")
+		}
+	}()
+	for i := 0; i < 20000; i++ {
+		_, _ = service.GetSessionToken(sessionID, "onedrive")
+	}
+	<-done
 }

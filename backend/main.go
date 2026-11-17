@@ -72,6 +72,8 @@ func initialize(e *echo.Echo) {
 	e.Use(echoMiddleware.Recover())
 	e.Use(middleware.SecurityHeaders())
 	e.Use(middleware.CORSConfig())
+	e.Use(middleware.SameOriginWrites())
+	e.Use(auth.SessionMiddleware(authService))
 }
 
 // handleHealth returns the health status of the backend service

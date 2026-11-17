@@ -201,7 +201,7 @@ In production everything is served from one origin: the frontend container (ngin
 cp docker-compose.override.yml.example docker-compose.override.yml
 ```
 
-Edit `docker-compose.override.yml` to configure local ports and development URLs (e.g., `localhost:4200`, `localhost:8080`). The development build calls the backend directly at `http://localhost:8080`.
+Edit `docker-compose.override.yml` to configure local ports and development URLs. Locally, the app runs on `http://localhost:4200` and the API under `http://localhost:4200/api`, just like production, so register `http://localhost:4200/api/auth/<provider>/callback` as an extra OAuth redirect URI for local testing. Open the app at exactly the `FRONTEND_URL` origin (`localhost`, not `127.0.0.1`): the backend rejects state-changing requests from any other origin.
 
 ### 4. Run with Docker Compose
 
@@ -224,7 +224,7 @@ The application will be available at the configured domain/port.
 # Frontend
 cd frontend
 npm install
-npm start  # http://localhost:4200
+npm start  # http://localhost:4200, proxies /api to the backend (proxy.conf.json)
 
 # Backend
 cd backend
@@ -243,31 +243,34 @@ uvicorn main:app --host 0.0.0.0 --port 8081
 
 ### Backend API (Port 8080, `/api/*` behind the frontend in production)
 
+#### Sessions
+
+Sessions are created by the backend when a login starts and live in an `allme_session` cookie (HttpOnly, Secure, SameSite=Lax, path `/api`, cleared when the browser closes, expires server-side after 24 h of inactivity). The session ID changes after every successful login, the OAuth callback only completes in the browser that started the login, and no endpoint accepts a session ID as a parameter. State-changing requests from another origin are rejected.
+
 #### Authentication
 ```
-GET  /auth/:provider/initiate     # Start OAuth flow
-GET  /auth/:provider/callback     # OAuth callback handler
-GET  /auth/session/:sessionId     # Check session validity
+GET  /auth/:provider/login          # Start OAuth flow (creates the session cookie if needed)
+GET  /auth/:provider/callback       # OAuth callback handler (rotates the session ID)
+GET  /auth/validate-session         # Is the session signed in to ?provider=
+POST /auth/signout                  # Sign out of ?provider= (ends the session when none is left)
 ```
 
 #### Storage
 ```
-POST /storage/browse              # Get folder contents
-POST /storage/parse-link          # Parse shared link
+GET  /storage/folder-contents       # List a shared folder (?share_url=&provider=)
 ```
 
 #### Face Recognition
 ```
-POST /face/register-base          # Register reference face
-POST /face/compare-folder         # Start comparison job
-GET  /face/job-status/:jobId      # Get job progress
-DEL  /face/clear-reference/:sessionId  # Clear face encoding
+POST   /face/register-base          # Register reference face (multipart "image")
+POST   /face/compare-folder         # Start comparison job
+GET    /face/job-status/:jobId      # Job progress (only for the session that started it)
+DELETE /face/reference              # Clear the session's reference face
 ```
 
 #### Download
 ```
-POST /download/prepare            # Prepare ZIP download
-GET  /download/:downloadId        # Download prepared ZIP
+POST /downloads/zip                 # Stream selected files as a ZIP
 ```
 
 #### Thumbnails

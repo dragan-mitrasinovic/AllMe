@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"all-me-backend/internal/session"
 	"all-me-backend/pkg/models"
 	"errors"
 	"sync"
@@ -97,6 +98,11 @@ func (m *MemoryStore) GetSession(sessionID string) (*models.UserSession, error) 
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	return m.getSessionLocked(sessionID)
+}
+
+// getSessionLocked looks up a live session and refreshes its last access time. The caller must hold m.mutex.
+func (m *MemoryStore) getSessionLocked(sessionID string) (*models.UserSession, error) {
 	session, exists := m.sessions[sessionID]
 	if !exists {
 		return nil, errors.New("session not found")
@@ -114,9 +120,13 @@ func (m *MemoryStore) GetSession(sessionID string) (*models.UserSession, error) 
 	return session, nil
 }
 
-// GetSessionToken retrieves a session and returns the token for the specified provider
+// GetSessionToken retrieves a session and returns the token for the specified provider.
+// The token map is read under the lock, because logins and sign-outs modify it concurrently.
 func (m *MemoryStore) GetSessionToken(sessionID, provider string) (*models.Token, error) {
-	session, err := m.GetSession(sessionID)
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	session, err := m.getSessionLocked(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -160,4 +170,61 @@ func (m *MemoryStore) cleanupExpiredStates() {
 			delete(m.states, state)
 		}
 	}
+}
+
+// CreateSession creates and stores an empty session with a new random ID.
+func (m *MemoryStore) CreateSession() (*models.UserSession, error) {
+	id, err := session.NewID()
+	if err != nil {
+		return nil, err
+	}
+
+	newSession := &models.UserSession{
+		SessionID: id,
+		Tokens:    make(map[string]*models.Token),
+	}
+	if err := m.StoreSession(newSession); err != nil {
+		return nil, err
+	}
+	return newSession, nil
+}
+
+// SessionExists reports whether a session exists and hasn't expired, and refreshes its last access time.
+func (m *MemoryStore) SessionExists(sessionID string) bool {
+	if sessionID == "" {
+		return false
+	}
+	_, err := m.GetSession(sessionID)
+	return err == nil
+}
+
+// DeleteSession removes a session.
+func (m *MemoryStore) DeleteSession(sessionID string) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	delete(m.sessions, sessionID)
+}
+
+// RotateSessionID moves a session to a new random ID and removes the old one, so an ID that existed
+// before login is never valid after it.
+func (m *MemoryStore) RotateSessionID(oldID string) (*models.UserSession, error) {
+	newID, err := session.NewID()
+	if err != nil {
+		return nil, err
+	}
+
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	existing, ok := m.sessions[oldID]
+	if !ok {
+		return nil, errors.New("session not found")
+	}
+
+	delete(m.sessions, oldID)
+	existing.SessionID = newID
+	existing.UpdateLastAccessed()
+	m.sessions[newID] = existing
+	return existing, nil
 }

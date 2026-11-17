@@ -1,9 +1,11 @@
 package face
 
 import (
+	"all-me-backend/internal/session"
 	"all-me-backend/pkg/models"
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -92,83 +94,59 @@ func (s *Service) CompareFolderImages(sessionID string, folderLink string, token
 	return jobID, nil
 }
 
-// GetJobStatus retrieves the status of a comparison job
-func (s *Service) GetJobStatus(jobID string) (*JobStatusResponse, error) {
-	// Check if this is a batch job managed by Go
-	ctx, isBatchJob := s.jobManager.Get(jobID)
-
-	if isBatchJob {
-		// Return status from our job manager
-		response := &JobStatusResponse{
-			JobID:        jobID,
-			Status:       ctx.status,
-			CurrentImage: ctx.currentImage,
-			TotalImages:  ctx.totalImages,
-			MatchesFound: ctx.matchesFound,
-			Error:        ctx.errorMessage,
-		}
-
-		// Calculate progress percentage
-		if ctx.totalImages > 0 {
-			response.Progress = (ctx.currentImage * 100) / ctx.totalImages
-		}
-
-		// Set message
-		if ctx.status == "processing" {
-			response.Message = fmt.Sprintf("Processing image %d of %d", ctx.currentImage, ctx.totalImages)
-		} else if ctx.status == "completed" {
-			response.Message = fmt.Sprintf("Completed! Found %d matches", ctx.matchesFound)
-		} else if ctx.status == "failed" {
-			response.Message = fmt.Sprintf("Failed: %s", ctx.errorMessage)
-		}
-
-		// Map matches to cloud items if completed
-		if ctx.status == "completed" && ctx.matches != nil {
-			matchingItems := make([]*models.CloudItem, 0, len(ctx.matches))
-			for _, matchResult := range ctx.matches {
-				if matchResult.Index < len(ctx.allImages) {
-					item := ctx.allImages[matchResult.Index]
-					// Create a copy and add the match distance
-					itemCopy := *item
-					itemCopy.MatchDistance = &matchResult.Distance
-					matchingItems = append(matchingItems, &itemCopy)
-				}
-			}
-			response.Matches = matchingItems
-
-			// Clean up the job context after successful completion
-			s.jobManager.Delete(jobID)
-		}
-
-		// Also clean up on error or failed status
-		if ctx.status == "failed" || ctx.status == "error" {
-			s.jobManager.Delete(jobID)
-		}
-
-		return response, nil
+// GetJobStatus retrieves the status of a comparison job. Jobs are only visible to the session that
+// started them; any other session gets ErrJobNotFound.
+func (s *Service) GetJobStatus(jobID, sessionID string) (*JobStatusResponse, error) {
+	ctx, exists := s.jobManager.Get(jobID)
+	if !exists || sessionID == "" || subtle.ConstantTimeCompare([]byte(ctx.ownerSessionID), []byte(sessionID)) != 1 {
+		return nil, ErrJobNotFound
 	}
 
-	// Fall back to querying Python service directly (for backwards compatibility)
-	var pythonStatus pythonJobStatusResponse
-	url := fmt.Sprintf("/face/job-status/%s", jobID)
-
-	if err := s.callPythonServiceGet(url, &pythonStatus); err != nil {
-		// Check if it's a "not found" error
-		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "session not found") {
-			return nil, ErrJobNotFound
-		}
-		return nil, err
-	}
-
+	// Return status from our job manager
 	response := &JobStatusResponse{
-		JobID:        pythonStatus.JobID,
-		Status:       pythonStatus.Status,
-		Progress:     pythonStatus.Progress,
-		CurrentImage: pythonStatus.CurrentImage,
-		TotalImages:  pythonStatus.TotalImages,
-		MatchesFound: pythonStatus.MatchesFound,
-		Message:      pythonStatus.Message,
-		Error:        pythonStatus.Error,
+		JobID:        jobID,
+		Status:       ctx.status,
+		CurrentImage: ctx.currentImage,
+		TotalImages:  ctx.totalImages,
+		MatchesFound: ctx.matchesFound,
+		Error:        ctx.errorMessage,
+	}
+
+	// Calculate progress percentage
+	if ctx.totalImages > 0 {
+		response.Progress = (ctx.currentImage * 100) / ctx.totalImages
+	}
+
+	// Set message
+	if ctx.status == "processing" {
+		response.Message = fmt.Sprintf("Processing image %d of %d", ctx.currentImage, ctx.totalImages)
+	} else if ctx.status == "completed" {
+		response.Message = fmt.Sprintf("Completed! Found %d matches", ctx.matchesFound)
+	} else if ctx.status == "failed" {
+		response.Message = fmt.Sprintf("Failed: %s", ctx.errorMessage)
+	}
+
+	// Map matches to cloud items if completed
+	if ctx.status == "completed" && ctx.matches != nil {
+		matchingItems := make([]*models.CloudItem, 0, len(ctx.matches))
+		for _, matchResult := range ctx.matches {
+			if matchResult.Index < len(ctx.allImages) {
+				item := ctx.allImages[matchResult.Index]
+				// Create a copy and add the match distance
+				itemCopy := *item
+				itemCopy.MatchDistance = &matchResult.Distance
+				matchingItems = append(matchingItems, &itemCopy)
+			}
+		}
+		response.Matches = matchingItems
+
+		// Clean up the job context after successful completion
+		s.jobManager.Delete(jobID)
+	}
+
+	// Also clean up on error or failed status
+	if ctx.status == "failed" || ctx.status == "error" {
+		s.jobManager.Delete(jobID)
 	}
 
 	return response, nil
@@ -270,10 +248,14 @@ func (s *Service) downloadAndEncodeImage(item *models.CloudItem, token *models.T
 // processFolderInBatches processes images in batches of 100 and creates a unified job
 func (s *Service) processFolderInBatches(sessionID string, allImages []*models.CloudItem, token *models.Token) (string, error) {
 	// Create a unified job ID for the client
-	unifiedJobID := fmt.Sprintf("batch-%d-%s", time.Now().Unix(), sessionID)
+	jobID, err := session.NewID()
+	if err != nil {
+		return "", fmt.Errorf("failed to create job ID: %w", err)
+	}
+	unifiedJobID := "job-" + jobID
 
 	// Store the job context
-	s.jobManager.Store(unifiedJobID, allImages, token)
+	s.jobManager.Store(unifiedJobID, sessionID, allImages, token)
 
 	// Process batches in the background
 	go s.processBatchesBackground(unifiedJobID, sessionID, allImages, token)

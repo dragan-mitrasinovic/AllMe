@@ -7,15 +7,16 @@ import (
 )
 
 type jobContext struct {
-	allImages    []*models.CloudItem
-	token        *models.Token
-	createdAt    time.Time
-	status       string
-	currentImage int
-	totalImages  int
-	matchesFound int
-	matches      []pythonMatchResult
-	errorMessage string
+	ownerSessionID string
+	allImages      []*models.CloudItem
+	token          *models.Token
+	createdAt      time.Time
+	status         string
+	currentImage   int
+	totalImages    int
+	matchesFound   int
+	matches        []pythonMatchResult
+	errorMessage   string
 }
 
 // JobManager manages job contexts for face comparison operations
@@ -52,18 +53,19 @@ func (jm *JobManager) cleanupExpiredJobs() {
 	}
 }
 
-func (jm *JobManager) Store(jobID string, allImages []*models.CloudItem, token *models.Token) {
+func (jm *JobManager) Store(jobID, ownerSessionID string, allImages []*models.CloudItem, token *models.Token) {
 	jm.mu.Lock()
 	defer jm.mu.Unlock()
 
 	jm.contexts[jobID] = &jobContext{
-		allImages:    allImages,
-		token:        token,
-		createdAt:    time.Now(),
-		status:       "processing",
-		totalImages:  len(allImages),
-		currentImage: 0,
-		matchesFound: 0,
+		ownerSessionID: ownerSessionID,
+		allImages:      allImages,
+		token:          token,
+		createdAt:      time.Now(),
+		status:         "processing",
+		totalImages:    len(allImages),
+		currentImage:   0,
+		matchesFound:   0,
 	}
 }
 

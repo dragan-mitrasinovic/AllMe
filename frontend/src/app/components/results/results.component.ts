@@ -242,16 +242,10 @@ export class ResultsComponent implements OnInit {
   private downloadFiles(files: CloudItem[]): void {
     if (files.length === 0) return;
 
-    const sessionId = this.authService.getSessionId();
-    if (!sessionId) {
-      this.errorMessage = 'Session expired. Please start over.';
-      return;
-    }
-
     this.isDownloading = true;
     this.errorMessage = '';
 
-    this.downloadService.downloadZip(files, sessionId, this.provider).subscribe({
+    this.downloadService.downloadZip(files, this.provider).subscribe({
       next: (blob) => {
         this.downloadService.triggerDownload(blob, `allme-photos-${Date.now()}.zip`);
         this.isDownloading = false;
@@ -269,12 +263,8 @@ export class ResultsComponent implements OnInit {
     // Clear folder context but keep authentication tokens
     this.authService.clearFolderContext();
     
-    // Clear reference image for the session
-    const sessionId = this.authService.getSessionId();
-    if (sessionId) {
-      // Fire and forget - don't wait for response
-      this.faceService.clearReferenceImage(sessionId).subscribe();
-    }
+    // Clear reference image for the session (fire and forget)
+    this.faceService.clearReferenceImage().subscribe();
     
     this.router.navigate(['/']);
   }

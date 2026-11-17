@@ -1,6 +1,7 @@
 package thumbnail
 
 import (
+	"all-me-backend/internal/session"
 	"all-me-backend/pkg/models"
 	"fmt"
 	"io"
@@ -24,19 +25,13 @@ func NewHandler(sessionStore models.SessionStore, googleDriveService Provider, o
 }
 
 func (h *Handler) RegisterRoutes(e *echo.Echo) {
-	e.GET("/thumbnail", h.handleThumbnailProxy)
+	e.GET("/thumbnail", h.handleThumbnailProxy, session.Required)
 }
 
 func (h *Handler) handleThumbnailProxy(c echo.Context) error {
-	sessionID := c.QueryParam("session_id")
+	sessionID := session.FromContext(c)
 	thumbnailURL := c.QueryParam("url")
 	provider := c.QueryParam("provider")
-
-	if sessionID == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "session_id is required",
-		})
-	}
 
 	if thumbnailURL == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{

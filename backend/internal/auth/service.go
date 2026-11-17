@@ -2,6 +2,7 @@ package auth
 
 import (
 	"all-me-backend/pkg/models"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -57,51 +58,71 @@ func (s *Service) InitiateOAuth(provider, sessionID string) (string, error) {
 	return authURL, nil
 }
 
-// HandleCallback processes the OAuth callback and exchanges code for token
-func (s *Service) HandleCallback(provider, code, state string) (*models.Token, error) {
+// HandleCallback processes the OAuth callback, exchanges the code for a token and stores it in the
+// session that started the login. cookieSessionID is the session cookie sent with the callback request:
+// it must match the session the state was issued to, so a login link can't be completed in another
+// browser. On success the session moves to a new ID, which is returned and must be sent as the new cookie.
+func (s *Service) HandleCallback(provider, code, state, cookieSessionID string) (*models.Token, string, error) {
 	if !s.validateProvider(provider) {
-		return nil, errors.New("unsupported provider: " + provider)
+		return nil, "", errors.New("unsupported provider: " + provider)
 	}
 
 	oauthState, err := s.store.ValidateState(state)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	// Verify provider matches the one in state
 	if oauthState.Provider != provider {
-		return nil, errors.New("provider mismatch in OAuth state")
+		return nil, "", errors.New("provider mismatch in OAuth state")
 	}
 
 	defer s.store.DeleteState(state)
 
+	if cookieSessionID == "" ||
+		subtle.ConstantTimeCompare([]byte(oauthState.SessionID), []byte(cookieSessionID)) != 1 {
+		return nil, "", errors.New("session mismatch in OAuth state")
+	}
+
+	userSession, err := s.store.GetSession(oauthState.SessionID)
+	if err != nil {
+		return nil, "", err
+	}
+
 	config, err := s.getProviderConfig(oauthState.Provider)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	token, err := s.exchangeCodeForToken(config, code)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
-	// Get or create session
-	session, err := s.store.GetSession(oauthState.SessionID)
+	s.store.mutex.Lock()
+	userSession.SetToken(oauthState.Provider, token)
+	s.store.mutex.Unlock()
+
+	rotated, err := s.store.RotateSessionID(oauthState.SessionID)
 	if err != nil {
-		session = &models.UserSession{
-			SessionID: oauthState.SessionID,
-			Tokens:    make(map[string]*models.Token),
-		}
+		return nil, "", err
 	}
 
-	session.SetToken(oauthState.Provider, token)
+	return token, rotated.SessionID, nil
+}
 
-	err = s.store.StoreSession(session)
+// ResolveSession reports whether sessionID belongs to a live session.
+func (s *Service) ResolveSession(sessionID string) bool {
+	return s.store.SessionExists(sessionID)
+}
+
+// CreateSession starts a new, empty session and returns its ID.
+func (s *Service) CreateSession() (string, error) {
+	newSession, err := s.store.CreateSession()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-
-	return token, nil
+	return newSession.SessionID, nil
 }
 
 // exchangeCodeForToken exchanges authorization code for access token
@@ -179,23 +200,27 @@ func (s *Service) GetSessionToken(sessionID, provider string) (*models.Token, er
 	return s.store.GetSessionToken(sessionID, provider)
 }
 
-// SignOutProvider removes the token for a specific provider from the session
-func (s *Service) SignOutProvider(sessionID, provider string) error {
+// SignOutProvider removes the token for a specific provider from the session. When no provider is left
+// signed in, the whole session is deleted and sessionEnded is true.
+func (s *Service) SignOutProvider(sessionID, provider string) (sessionEnded bool, err error) {
 	if !s.validateProvider(provider) {
-		return errors.New("unsupported provider: " + provider)
+		return false, errors.New("unsupported provider: " + provider)
 	}
 
-	session, err := s.store.GetSession(sessionID)
+	userSession, err := s.store.GetSession(sessionID)
 	if err != nil {
 		// Session doesn't exist - this is okay, just return success
-		return nil
+		return true, nil
 	}
 
-	// Remove the token for this provider
-	if session.Tokens != nil {
-		delete(session.Tokens, provider)
-	}
+	s.store.mutex.Lock()
+	delete(userSession.Tokens, provider)
+	remaining := len(userSession.Tokens)
+	s.store.mutex.Unlock()
 
-	// Update the session in the store
-	return s.store.StoreSession(session)
+	if remaining == 0 {
+		s.store.DeleteSession(sessionID)
+		return true, nil
+	}
+	return false, nil
 }

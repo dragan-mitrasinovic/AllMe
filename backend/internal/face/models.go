@@ -2,16 +2,11 @@ package face
 
 import "all-me-backend/pkg/models"
 
-type RegisterBaseFaceRequest struct {
-	SessionID string `form:"session_id"`
-}
-
 type RegisterBaseFaceResponse struct {
 	Success bool `json:"success"`
 }
 
 type CompareFolderRequest struct {
-	SessionID  string `json:"session_id"`
 	FolderLink string `json:"folder_link"`
 	Provider   string `json:"provider"`
 	Recursive  bool   `json:"recursive"`

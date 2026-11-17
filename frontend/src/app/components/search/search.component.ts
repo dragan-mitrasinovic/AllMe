@@ -17,7 +17,6 @@ import { HttpClient } from '@angular/common/http';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import { CloudItem } from '../../models/auth.model';
 import { FaceService } from '../../services/face.service';
-import { AuthService } from '../../services/auth.service';
 import { NotificationService } from '../../services/notification.service';
 import { ThumbnailPipe } from '../../pipes/thumbnail.pipe';
 
@@ -47,7 +46,6 @@ export class SearchComponent implements OnInit, OnDestroy {
 
   private readonly router = inject(Router);
   private readonly faceService = inject(FaceService);
-  private readonly authService = inject(AuthService);
   private readonly breakpointObserver = inject(BreakpointObserver);
   private readonly notificationService = inject(NotificationService);
   private readonly http = inject(HttpClient);
@@ -225,19 +223,13 @@ export class SearchComponent implements OnInit, OnDestroy {
   uploadReferenceImage(): void {
     if (!this.selectedFile) return;
 
-    const sessionId = this.authService.getSessionId();
-    if (!sessionId) {
-      this.errorMessage = 'Session expired. Please start over.';
-      return;
-    }
-
     const previousReferenceUrl = this.referenceImageUrl;
 
     this.isUploading = true;
     this.errorMessage = '';
     this.uploadComplete = false;
 
-    this.faceService.registerBaseFace(sessionId, this.selectedFile).subscribe({
+    this.faceService.registerBaseFace(this.selectedFile).subscribe({
       next: (response) => {
         this.isUploading = false;
         this.uploadComplete = response.success;
@@ -273,9 +265,7 @@ export class SearchComponent implements OnInit, OnDestroy {
   startFaceMatching(): void {
     if (!this.uploadComplete) return;
 
-    const sessionId = this.authService.getSessionId();
-
-    if (!sessionId || !this.folderLink) {
+    if (!this.folderLink) {
       this.errorMessage = 'Session expired. Please start over.';
       return;
     }
@@ -285,7 +275,7 @@ export class SearchComponent implements OnInit, OnDestroy {
     this.matchingProgress = 0;
     this.matchingMessage = 'Starting face matching...';
 
-    this.faceService.compareFolder(sessionId, this.folderLink, this.provider, this.recursiveSearch).subscribe({
+    this.faceService.compareFolder(this.folderLink, this.provider, this.recursiveSearch).subscribe({
       next: (response) => {
         const jobId = response.job_id;
 
@@ -356,12 +346,6 @@ export class SearchComponent implements OnInit, OnDestroy {
   }
 
   uploadCloudImage(item: CloudItem): void {
-    const sessionId = this.authService.getSessionId();
-    if (!sessionId) {
-      this.errorMessage = 'Session expired. Please start over.';
-      return;
-    }
-
     const previousCloudImage = this.selectedCloudImage;
     const previousReferenceUrl = this.referenceImageUrl;
     const previousProvider = this.referenceImageProvider;
@@ -380,7 +364,7 @@ export class SearchComponent implements OnInit, OnDestroy {
         const file = new File([blob], item.name, { type: item.mime_type });
 
         // Upload to face service
-        this.faceService.registerBaseFace(sessionId, file).subscribe({
+        this.faceService.registerBaseFace(file).subscribe({
           next: (response) => {
             this.isUploading = false;
             this.uploadComplete = response.success;

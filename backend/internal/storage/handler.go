@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"all-me-backend/internal/session"
 	"all-me-backend/pkg/models"
 	"fmt"
 	"net/http"
@@ -21,25 +22,19 @@ func NewHandler(service *Service, sessionStore models.SessionStore) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(e *echo.Echo) {
-	e.GET("/storage/folder-contents", h.GetFolderContents)
+	e.GET("/storage/folder-contents", h.GetFolderContents, session.Required)
 }
 
 // GetFolderContents handles GET /storage/folder-contents
 // It retrieves folder metadata and all contents (files and folders) from a cloud storage share link
 func (h *Handler) GetFolderContents(c echo.Context) error {
 	shareURL := c.QueryParam("share_url")
-	sessionID := c.QueryParam("session_id")
+	sessionID := session.FromContext(c)
 	provider := c.QueryParam("provider")
 
 	if shareURL == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{
 			"error": "share_url query parameter is required",
-		})
-	}
-
-	if sessionID == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "session_id query parameter is required",
 		})
 	}
 

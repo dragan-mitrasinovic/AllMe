@@ -11,16 +11,14 @@ export class FaceService {
   private readonly http = inject(HttpClient);
   private readonly apiUrl = environment.apiUrl;
 
-  registerBaseFace(sessionId: string, imageFile: File): Observable<FaceRegisterResponse> {
+  registerBaseFace(imageFile: File): Observable<FaceRegisterResponse> {
     const formData = new FormData();
     formData.append('image', imageFile);
-    formData.append('session_id', sessionId);
     return this.http.post<FaceRegisterResponse>(`${this.apiUrl}/face/register-base`, formData);
   }
 
-  compareFolder(sessionId: string, folderLink: string, provider: string, recursive: boolean = false): Observable<CompareFolderResponse> {
+  compareFolder(folderLink: string, provider: string, recursive: boolean = false): Observable<CompareFolderResponse> {
     const request: CompareFolderRequest = {
-      session_id: sessionId,
       folder_link: folderLink,
       provider: provider,
       recursive: recursive
@@ -40,7 +38,7 @@ export class FaceService {
     );
   }
 
-  clearReferenceImage(sessionId: string): Observable<any> {
-    return this.http.delete(`${this.apiUrl}/face/clear-reference/${sessionId}`);
+  clearReferenceImage(): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/face/reference`);
   }
 }

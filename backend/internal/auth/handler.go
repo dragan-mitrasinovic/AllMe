@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"all-me-backend/internal/session"
 	"net/http"
 	"os"
 
@@ -30,15 +31,35 @@ func (h *Handler) RegisterRoutes(e *echo.Echo) {
 	auth.POST("/signout", h.handleSignOut)
 }
 
-// handleLogin initiates the OAuth flow by redirecting to the provider's auth page
+// SessionMiddleware puts the session from the cookie into the request context if it is still valid.
+// It never creates sessions; only login does.
+func SessionMiddleware(authService *Service) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if id := session.CookieValue(c); id != "" && authService.ResolveSession(id) {
+				session.SetContext(c, id)
+			}
+			return next(c)
+		}
+	}
+}
+
+// handleLogin initiates the OAuth flow by redirecting to the provider's auth page.
+// The browser's session is created here if it doesn't have one yet.
 func (h *Handler) handleLogin(c echo.Context) error {
 	provider := c.Param("provider")
-	sessionID := c.QueryParam("session_id")
 
+	sessionID := session.FromContext(c)
 	if sessionID == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "session_id is required",
-		})
+		newID, err := h.authService.CreateSession()
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"error": "failed to start session",
+			})
+		}
+		sessionID = newID
+		session.SetCookie(c, sessionID)
+		session.SetContext(c, sessionID)
 	}
 
 	authURL, err := h.authService.InitiateOAuth(provider, sessionID)
@@ -76,11 +97,13 @@ func (h *Handler) handleCallback(c echo.Context) error {
 			h.frontendURL+"/callback?error=missing_state")
 	}
 
-	token, err := h.authService.HandleCallback(provider, code, state)
+	token, newSessionID, err := h.authService.HandleCallback(provider, code, state, session.FromContext(c))
 	if err != nil {
 		return c.Redirect(http.StatusTemporaryRedirect,
 			h.frontendURL+"/callback?error=auth_failed&message="+err.Error())
 	}
+
+	session.SetCookie(c, newSessionID)
 
 	// Redirect to frontend callback with success
 	return c.Redirect(http.StatusTemporaryRedirect,
@@ -89,14 +112,7 @@ func (h *Handler) handleCallback(c echo.Context) error {
 
 // handleValidateSession checks if the session is valid and has a token for the specified provider
 func (h *Handler) handleValidateSession(c echo.Context) error {
-	sessionID := c.QueryParam("session_id")
 	provider := c.QueryParam("provider")
-
-	if sessionID == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "session_id is required",
-		})
-	}
 
 	if provider == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{
@@ -104,8 +120,9 @@ func (h *Handler) handleValidateSession(c echo.Context) error {
 		})
 	}
 
+	sessionID := session.FromContext(c)
 	token, err := h.authService.GetSessionToken(sessionID, provider)
-	if err != nil || token == nil {
+	if sessionID == "" || err != nil || token == nil {
 		// Session doesn't exist, is expired, or lacks token for provider
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"valid":         false,
@@ -121,16 +138,9 @@ func (h *Handler) handleValidateSession(c echo.Context) error {
 	})
 }
 
-// handleSignOut signs out from the specified provider by revoking the token
+// handleSignOut signs out from the specified provider. When no provider is left, the session ends.
 func (h *Handler) handleSignOut(c echo.Context) error {
-	sessionID := c.QueryParam("session_id")
 	provider := c.QueryParam("provider")
-
-	if sessionID == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "session_id is required",
-		})
-	}
 
 	if provider == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{
@@ -138,11 +148,19 @@ func (h *Handler) handleSignOut(c echo.Context) error {
 		})
 	}
 
-	err := h.authService.SignOutProvider(sessionID, provider)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": err.Error(),
-		})
+	sessionEnded := true
+	if sessionID := session.FromContext(c); sessionID != "" {
+		ended, err := h.authService.SignOutProvider(sessionID, provider)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": err.Error(),
+			})
+		}
+		sessionEnded = ended
+	}
+
+	if sessionEnded {
+		session.ClearCookie(c)
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{

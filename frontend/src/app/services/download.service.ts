@@ -11,10 +11,9 @@ export class DownloadService {
   private readonly http = inject(HttpClient);
   private readonly apiUrl = environment.apiUrl;
 
-  downloadZip(files: CloudItem[], sessionId: string, provider: string): Observable<Blob> {
+  downloadZip(files: CloudItem[], provider: string): Observable<Blob> {
     return this.http.post(`${this.apiUrl}/downloads/zip`, { 
       files,
-      session_id: sessionId,
       provider: provider
     }, {
       responseType: 'blob'

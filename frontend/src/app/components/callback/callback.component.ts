@@ -4,7 +4,6 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
-import { AuthService } from '../../services/auth.service';
 import { StorageService } from '../../services/storage.service';
 import { FaceService } from '../../services/face.service';
 
@@ -22,7 +21,6 @@ import { FaceService } from '../../services/face.service';
 export class CallbackComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  private readonly authService = inject(AuthService);
   private readonly storageService = inject(StorageService);
   private readonly faceService = inject(FaceService);
 
@@ -55,9 +53,8 @@ export class CallbackComponent implements OnInit {
 
   private handleSuccessfulAuth(provider: string): void {
     const folderLink = sessionStorage.getItem('folderLink');
-    const sessionId = this.authService.getSessionId();
 
-    if (!folderLink || !sessionId) {
+    if (!folderLink) {
       this.errorMessage = 'Session expired. Please start over.';
       this.isProcessing = false;
       setTimeout(() => this.router.navigate(['/']), 2000);
@@ -65,22 +62,21 @@ export class CallbackComponent implements OnInit {
     }
 
     // Clear any existing reference image for this session (but keep the auth token)
-    this.faceService.clearReferenceImage(sessionId).subscribe({
+    this.faceService.clearReferenceImage().subscribe({
       next: () => {
         // Reference image cleared, now get folder contents
-        this.fetchFolderContents(folderLink, sessionId, provider);
+        this.fetchFolderContents(folderLink, provider);
       },
       error: () => {
         // Even if clearing fails, proceed to get folder contents
         // (reference image might not exist, which is fine)
-        this.fetchFolderContents(folderLink, sessionId, provider);
+        this.fetchFolderContents(folderLink, provider);
       }
     });
   }
 
-  private fetchFolderContents(folderLink: string, sessionId: string, provider: string): void {
-    // Get folder contents with session ID and provider
-    this.storageService.getFolderContents(folderLink, sessionId, provider).subscribe({
+  private fetchFolderContents(folderLink: string, provider: string): void {
+    this.storageService.getFolderContents(folderLink, provider).subscribe({
       next: (response) => {
         this.isProcessing = false;
         

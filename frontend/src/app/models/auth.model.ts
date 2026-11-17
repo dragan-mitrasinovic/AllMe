@@ -4,11 +4,6 @@ export interface Token {
   scope?: string;
 }
 
-export interface UserSession {
-  session_id: string;
-  tokens: { [provider: string]: Token };
-}
-
 export interface CloudItem {
   id: string;
   name: string;

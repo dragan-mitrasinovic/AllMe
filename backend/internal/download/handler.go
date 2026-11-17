@@ -1,6 +1,7 @@
 package download
 
 import (
+	"all-me-backend/internal/session"
 	"all-me-backend/pkg/models"
 	"fmt"
 	"net/http"
@@ -22,7 +23,7 @@ func NewHandler(service *Service, sessionStore models.SessionStore) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(e *echo.Echo) {
-	e.POST("/downloads/zip", h.DownloadZip)
+	e.POST("/downloads/zip", h.DownloadZip, session.Required)
 }
 
 // DownloadZip handles POST /downloads/zip
@@ -41,19 +42,13 @@ func (h *Handler) DownloadZip(c echo.Context) error {
 		})
 	}
 
-	if req.SessionID == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Session ID is required",
-		})
-	}
-
 	if req.Provider == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{
 			"error": "Provider is required",
 		})
 	}
 
-	token, err := h.sessionStore.GetSessionToken(req.SessionID, req.Provider)
+	token, err := h.sessionStore.GetSessionToken(session.FromContext(c), req.Provider)
 	if err != nil {
 		return c.JSON(http.StatusUnauthorized, map[string]string{
 			"error": fmt.Sprintf("Authentication failed: %v", err),

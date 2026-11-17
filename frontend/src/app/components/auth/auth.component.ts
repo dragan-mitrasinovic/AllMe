@@ -53,11 +53,6 @@ export class AuthComponent {
   }
 
   private checkAuthStatus(): void {
-    const sessionId = this.authService.getSessionId();
-    if (!sessionId) {
-      return;
-    }
-
     // Check OneDrive
     this.authService.validateSession('onedrive').subscribe({
       next: (validation) => {
@@ -124,8 +119,7 @@ export class AuthComponent {
     sessionStorage.setItem('provider', this.selectedProvider);
 
     // Clear any existing reference image before proceeding
-    const sessionId = this.authService.getOrCreateSessionId();
-    this.faceService.clearReferenceImage(sessionId).subscribe({
+    this.faceService.clearReferenceImage().subscribe({
       next: () => {
         // Reference image cleared, now check session validity
         this.checkSessionAndProceed();
@@ -164,14 +158,7 @@ export class AuthComponent {
   }
 
   private fetchFolderContents(): void {
-    const sessionId = this.authService.getSessionId();
-    if (!sessionId) {
-      this.showProcessingLoader = false;
-      this.initiateOAuth();
-      return;
-    }
-
-    this.storageService.getFolderContents(this.folderLink, sessionId, this.selectedProvider).subscribe({
+    this.storageService.getFolderContents(this.folderLink, this.selectedProvider).subscribe({
       next: (response) => {
         this.isLoading = false;
         this.showProcessingLoader = false;

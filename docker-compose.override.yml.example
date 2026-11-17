@@ -6,9 +6,9 @@ services:
   frontend:
     build:
       args:
-        BUILD_CONFIGURATION: development  # Dev build calls the backend directly at localhost:8080
+        BUILD_CONFIGURATION: development
     ports:
-      - "4200:8080"  # Expose frontend (nginx) on localhost:4200
+      - "4200:8080"  # Frontend (nginx, also proxies /api to the backend) on localhost:4200
 
   backend:
     ports:
@@ -17,8 +17,8 @@ services:
       - DOMAIN=localhost:4200
       - FRONTEND_URL=http://localhost:4200
       # Override OAuth redirect URIs for local testing
-      - ONEDRIVE_REDIRECT_URI=http://localhost:8080/auth/onedrive/callback
-      - GOOGLEDRIVE_REDIRECT_URI=http://localhost:8080/auth/googledrive/callback
+      - ONEDRIVE_REDIRECT_URI=http://localhost:4200/api/auth/onedrive/callback
+      - GOOGLEDRIVE_REDIRECT_URI=http://localhost:4200/api/auth/googledrive/callback
 
   face-service:
     ports:
